@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bubbe's Morning Friend</title>
+  <style>
+    :root {
+      --bg: #fdf6e9;
+      --card: #ffffff;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --accent: #111827;
+      --soft: #fef3c7;
+      --soft-2: #eff6ff;
+      --border: #f1e4bf;
+      --user: #111827;
+      --assistant: #fff7e6;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.45;
+    }
+
+    .screen {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    .welcome {
+      max-width: 700px;
+      width: 100%;
+      text-align: center;
+    }
+
+    .title {
+      font-size: clamp(2rem, 4vw, 3rem);
+      font-weight: 700;
+      margin: 0;
+    }
+
+    .subtitle {
+      font-size: 1.4rem;
+      color: var(--muted);
+      margin-top: 16px;
+    }
+
+    .start-btn, .send-btn, .pill-btn {
+      border: none;
+      border-radius: 24px;
+      cursor: pointer;
+      font-size: 1.2rem;
+      padding: 18px 24px;
+    }
+
+    .start-btn, .send-btn {
+      width: 100%;
+      background: var(--accent);
+      color: white;
+      margin-top: 28px;
+    }
+
+    .helper {
+      margin-top: 16px;
+      font-size: 1.15rem;
+      color: var(--muted);
+    }
+
+    .tiny-note {
+      margin-top: 40px;
+      font-size: 1rem;
+      color: var(--muted);
+    }
+
+    .app {
+      min-height: 100vh;
+      display: none;
+      flex-direction: column;
+    }
+
+    header {
+      background: white;
+      border-bottom: 1px solid var(--border);
+      padding: 20px 24px;
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: 2rem;
+    }
+
+    .container {
+      max-width: 900px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    .card {
+      background: var(--card);
+      border-radius: 28px;
+      box-shadow: 0 1px 8px rgba(0,0,0,.06);
+      border: 1px solid var(--border);
+      padding: 24px;
+    }
+
+    .tip {
+      background: var(--soft-2);
+      border-radius: 18px;
+      padding: 14px 16px;
+      font-size: 1.1rem;
+      color: #334155;
+      margin-bottom: 18px;
+    }
+
+    .messages {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .row {
+      display: flex;
+    }
+
+    .row.user { justify-content: flex-end; }
+    .row.assistant { justify-content: flex-start; }
+
+    .bubble {
+      max-width: 85%;
+      padding: 18px 20px;
+      border-radius: 24px;
+      font-size: 1.45rem;
+      line-height: 1.5;
+    }
+
+    .row.user .bubble {
+      background: var(--user);
+      color: white;
+    }
+
+    .row.assistant .bubble {
+      background: var(--assistant);
+      color: var(--text);
+    }
+
+    .controls {
+      border-top: 1px solid #ececec;
+      margin-top: 22px;
+      padding-top: 20px;
+    }
+
+    .prompts {
+      display: grid;
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+
+    .pill-btn {
+      background: var(--soft);
+      color: var(--text);
+      text-align: left;
+      width: 100%;
+    }
+
+    .name-btn {
+      background: var(--soft-2);
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 110px;
+      border-radius: 24px;
+      border: 1px solid #d1d5db;
+      padding: 18px;
+      font-size: 1.25rem;
+      resize: vertical;
+      font-family: inherit;
+      margin-bottom: 14px;
+    }
+
+    .footer-note {
+      margin-top: 14px;
+      font-size: 1rem;
+      color: var(--muted);
+    }
+
+    @media (max-width: 640px) {
+      .container { padding: 14px; }
+      .card { padding: 16px; }
+      .bubble { max-width: 92%; font-size: 1.25rem; }
+      header h1 { font-size: 1.6rem; }
+    }
+  </style>
+</head>
+<body>
+  <div id="welcomeScreen" class="screen">
+    <div class="welcome">
+      <h1 class="title">Bubbe's Morning Friend</h1>
+      <div class="subtitle">A warm, simple companion to start your day.</div>
+      <button class="start-btn" id="startBtn">Start Conversation</button>
+      <div class="helper">You can talk, remember, or just sit quietly together.</div>
+      <div class="tiny-note">This is a friendly companion. It does not provide medical advice.</div>
+    </div>
+  </div>
+
+  <div id="appScreen" class="app">
+    <header>
+      <div class="container"><h1>Bubbe's Morning Friend</h1></div>
+    </header>
+    <main class="container">
+      <div class="card">
+        <div class="tip">Tip: You can tell me your name anytime, and I’ll remember it while this page is open.</div>
+        <div class="messages" id="messages"></div>
+
+        <div class="controls">
+          <div class="prompts">
+            <button class="pill-btn name-btn" id="namePromptBtn">Tell me your name</button>
+            <button class="pill-btn" data-prompt="I feel a little lonely">I feel a little lonely</button>
+            <button class="pill-btn" data-prompt="Let’s talk">Let’s talk</button>
+            <button class="pill-btn" data-prompt="Give me a memory prompt">Give me a memory prompt</button>
+            <button class="pill-btn" data-prompt="I need encouragement">I need encouragement</button>
+            <button class="pill-btn" data-prompt="Just sit with me">Just sit with me</button>
+          </div>
+          <textarea id="messageInput" placeholder="Type here…"></textarea>
+          <button class="send-btn" id="sendBtn">Send</button>
+          <div class="footer-note">Later, this can become voice-based with a microphone button and spoken replies.</div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const welcomeScreen = document.getElementById('welcomeScreen');
+    const appScreen = document.getElementById('appScreen');
+    const startBtn = document.getElementById('startBtn');
+    const sendBtn = document.getElementById('sendBtn');
+    const input = document.getElementById('messageInput');
+    const messagesEl = document.getElementById('messages');
+    const namePromptBtn = document.getElementById('namePromptBtn');
+
+    const state = {
+      userName: '',
+      memory: {},
+      messages: [
+        {
+          role: 'assistant',
+          content: 'Good morning. I’m Bubbe’s Morning Friend. I’m here to keep you company. How are you doing this morning?'
+        }
+      ]
+    };
+
+    function renderMessages() {
+      messagesEl.innerHTML = '';
+      state.messages.forEach(msg => {
+        const row = document.createElement('div');
+        row.className = 'row ' + msg.role;
+        const bubble = document.createElement('div');
+        bubble.className = 'bubble';
+        bubble.textContent = msg.content;
+        row.appendChild(bubble);
+        messagesEl.appendChild(row);
+      });
+      window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+    }
+
+    function addMessage(role, content) {
+      state.messages.push({ role, content });
+      renderMessages();
+    }
+
+    function extractName(message) {
+      const cleaned = message.trim();
+      const lower = cleaned.toLowerCase();
+      const patterns = ['my name is ', 'i am ', "i'm ", 'call me '];
+      for (const p of patterns) {
+        const idx = lower.indexOf(p);
+        if (idx !== -1) {
+          const after = cleaned.slice(idx + p.length).trim();
+          if (after) {
+            const firstWord = after.split(/[\s,.!?]+/)[0];
+            if (firstWord) {
+              return firstWord.charAt(0).toUpperCase() + firstWord.slice(1);
+            }
+          }
+        }
+      }
+      return '';
+    }
+
+    function getReply(message) {
+      const text = message.toLowerCase();
+      const extractedName = extractName(message);
+
+      if (extractedName) {
+        state.userName = extractedName;
+        return `It’s really nice to meet you, ${state.userName}. I’ll remember that while we’re together.`;
+      }
+
+      if (text.includes('daughter')) {
+        state.memory.topic = 'daughter';
+        return 'You mentioned your daughter. How does that make you feel?';
+      }
+
+      if (text.includes('memory') || text.includes('childhood') || text.includes('past')) {
+        return 'I would love that. What is one small thing you remember clearly from your childhood home—maybe a smell, a sound, or a favorite chair?';
+      }
+
+      if (text.includes('lonely') || text.includes('alone') || text.includes('sad')) {
+        return 'I’m really glad you told me. I’m here with you. Would you like to talk a little, or would you prefer that we just sit quietly together for a moment?';
+      }
+
+      if (text.includes('doctor') || text.includes('pain') || text.includes('chest') || text.includes('medicine') || text.includes('blood pressure')) {
+        return 'Sorry, I am not trained as a physician, so I’m not comfortable commenting on that issue. It does sound important to you, so perhaps you may want to contact your doctor.';
+      }
+
+      if (text.includes('encouragement') || text.includes('worried') || text.includes('anxious')) {
+        return 'You don’t have to handle everything at once. Let’s just take this moment gently. What is one small thing that might feel comforting right now?';
+      }
+
+      if (text.includes('sit')) {
+        return 'I’m right here with you. We don’t have to talk. If you’d like, I can stay quiet with you, or gently share something when you’re ready.';
+      }
+
+      if (text.includes('let’s talk') || text.includes("let's talk")) {
+        return state.userName
+          ? `Of course, ${state.userName}. What feels most on your mind right now?`
+          : 'Of course. What feels most on your mind right now?';
+      }
+
+      if (state.memory.topic === 'daughter') {
+        return 'You mentioned your daughter earlier. How does that make you feel?';
+      }
+
+      return 'That sounds important, and I’m really glad you shared it with me. How does that make you feel?';
+    }
+
+    function sendMessage(text) {
+      const trimmed = text.trim();
+      if (!trimmed) return;
+      addMessage('user', trimmed);
+      const reply = getReply(trimmed);
+      setTimeout(() => addMessage('assistant', reply), 250);
+      input.value = '';
+    }
+
+    startBtn.addEventListener('click', () => {
+      welcomeScreen.style.display = 'none';
+      appScreen.style.display = 'flex';
+      renderMessages();
+    });
+
+    sendBtn.addEventListener('click', () => sendMessage(input.value));
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage(input.value);
+      }
+    });
+
+    document.querySelectorAll('[data-prompt]').forEach(btn => {
+      btn.addEventListener('click', () => sendMessage(btn.getAttribute('data-prompt')));
+    });
+
+    namePromptBtn.addEventListener('click', () => {
+      addMessage('assistant', 'By the way, what would you like me to call you?');
+    });
+  </script>
+</body>
+</html>
