@@ -82,6 +82,14 @@
       color: white;
       font-size: 1.5rem;
     }
+    button:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+    textarea:disabled {
+      opacity: 0.65;
+      background: #f8fafc;
+    }
     .chat-screen {
       height: 100vh;
       display: none;
@@ -206,7 +214,7 @@
 <body>
   <div id="welcome" class="welcome-screen">
     <div class="welcome-card">
-      <div class="version">v5</div>
+      <div class="version">v6</div>
       <h1>Bubbe's Morning Friend</h1>
       <div class="sub">A warm, simple companion to start your day.</div>
       <button class="primary" onclick="startConversation()">Start Conversation</button>
@@ -218,11 +226,11 @@
   <div id="chat" class="chat-screen">
     <div class="chat-header">
       Bubbe's Morning Friend
-      <span class="version">v5</span>
+      <span class="version">v6</span>
     </div>
     <div class="chat-shell">
       <div class="chat-card">
-        <div class="tip">Tip: You can tell me your name anytime, and I’ll remember it while we’re talking.</div>
+        <div class="tip">Tip: Replies use OpenAI on the server (your key stays private on Vercel). Tell me your name anytime—I’ll use it in this chat.</div>
         <div id="messages" class="messages"></div>
 
         <div class="controls">
@@ -235,7 +243,7 @@
           </div>
 
           <textarea id="input" placeholder="You can type here…"></textarea>
-          <button class="primary" onclick="sendTyped()">Send</button>
+          <button type="button" class="primary" id="sendBtn" onclick="sendTyped()">Send</button>
         </div>
       </div>
     </div>
@@ -249,7 +257,7 @@
       }
     ];
 
-    const memory = {};
+    let busy = false;
 
     function renderMessages() {
       const box = document.getElementById("messages");
@@ -270,80 +278,20 @@
       box.scrollTop = box.scrollHeight;
     }
 
+    function setBusy(on) {
+      document.querySelectorAll(".prompt").forEach((btn) => {
+        btn.disabled = on;
+      });
+      const input = document.getElementById("input");
+      if (input) input.disabled = on;
+      const sendBtn = document.getElementById("sendBtn");
+      if (sendBtn) sendBtn.disabled = on;
+    }
+
     function startConversation() {
       document.getElementById("welcome").style.display = "none";
       document.getElementById("chat").style.display = "flex";
       renderMessages();
-    }
-
-    function assistantReply(message) {
-      const text = message.toLowerCase().trim();
-
-      if (text.includes("my name is")) {
-        const parts = message.split(/my name is/i);
-        const name = parts[1] ? parts[1].trim().split(" ")[0] : "";
-        if (name) {
-          memory.name = name;
-          return `It’s really nice to meet you, ${name}. I’ll remember that.`;
-        }
-      }
-
-      if (text.startsWith("i am ")) {
-        const maybeName = message.slice(5).trim().split(" ")[0];
-        if (maybeName && maybeName.length < 20 && !text.includes("lonely") && !text.includes("sad")) {
-          memory.name = maybeName;
-          return `It’s really nice to meet you, ${maybeName}. I’ll remember that.`;
-        }
-      }
-
-      if (
-        text.includes("what shall we talk about") ||
-        text.includes("what should we talk about") ||
-        text.includes("what can we talk about") ||
-        text.includes("what do you want to talk about") ||
-        text.includes("you choose") ||
-        text.includes("i don't know what to say") ||
-        text.includes("i dont know what to say")
-      ) {
-        return "We can talk about anything you’d like.\n\nWe could talk about your day, someone in your family, a memory from long ago, or something that’s been on your mind.\n\nWhat sounds best to you?";
-      }
-
-      if (text.includes("daughter")) {
-        memory.topic = "daughter";
-        return "You mentioned your daughter.\n\nHow does that make you feel?";
-      }
-
-      if (text.includes("memory") || text.includes("childhood") || text.includes("past")) {
-        return "I would love that.\n\nWhat is one small thing you remember clearly from your childhood home—maybe a smell, a sound, or a favorite chair?";
-      }
-
-      if (text.includes("lonely") || text.includes("alone") || text.includes("sad")) {
-        return "I’m really glad you told me.\n\nWould you like to talk a little, or would you prefer that we just sit quietly together for a moment?";
-      }
-
-      if (
-        text.includes("doctor") ||
-        text.includes("pain") ||
-        text.includes("chest") ||
-        text.includes("medicine") ||
-        text.includes("blood pressure")
-      ) {
-        return "Sorry, I am not trained as a physician, so I’m not comfortable commenting on that issue. It does sound important to you, so perhaps you may want to contact your doctor.";
-      }
-
-      if (text.includes("encouragement") || text.includes("worried") || text.includes("anxious")) {
-        return "You don’t have to handle everything at once.\n\nLet’s just take this moment gently.\n\nWhat is one small thing that might feel comforting right now?";
-      }
-
-      if (text.includes("sit")) {
-        return "It’s nice to be here with you.\n\nWe don’t have to talk.\n\nWe can just sit quietly for a moment, and when you’re ready, we can begin.";
-      }
-
-      if (memory.topic === "daughter" && (text.includes("family") || text.includes("visit") || text.includes("weekend"))) {
-        return "Earlier, you mentioned your daughter.\n\nHow does that make you feel?";
-      }
-
-      return "Thank you for telling me that.\n\nWould you like to say a little more, or would it help if I asked you a gentle question?";
     }
 
     function sendPrompt(text) {
@@ -352,23 +300,57 @@
 
     function sendTyped() {
       const input = document.getElementById("input");
-      sendMessage(input.value);
+      const value = input.value;
       input.value = "";
       input.focus();
+      sendMessage(value);
     }
 
-    function sendMessage(text) {
+    async function sendMessage(text) {
       const trimmed = text.trim();
-      if (!trimmed) return;
+      if (!trimmed || busy) return;
+
+      busy = true;
+      setBusy(true);
+      const sendBtn = document.getElementById("sendBtn");
+      const prevSendLabel = sendBtn ? sendBtn.textContent : "";
+      if (sendBtn) sendBtn.textContent = "Sending…";
 
       messages.push({ role: "user", content: trimmed });
-      messages.push({ role: "assistant", content: assistantReply(trimmed) });
       renderMessages();
+
+      try {
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ messages })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(data.error || "Request failed");
+        }
+        const reply = typeof data.reply === "string" ? data.reply : "";
+        if (!reply) {
+          throw new Error("Empty reply");
+        }
+        messages.push({ role: "assistant", content: reply });
+      } catch (err) {
+        messages.push({
+          role: "assistant",
+          content:
+            "I’m having trouble reaching the gentle voice behind this page right now.\n\nPlease try again in a moment. If this keeps happening, confirm OPENAI_API_KEY is set for this project on Vercel (Settings → Environment Variables), redeploy, and use the live site URL—not a downloaded copy of the file."
+        });
+      } finally {
+        if (sendBtn) sendBtn.textContent = prevSendLabel;
+        busy = false;
+        setBusy(false);
+        renderMessages();
+      }
     }
 
     document.addEventListener("keydown", function (event) {
       const input = document.getElementById("input");
-      if (!input) return;
+      if (!input || busy) return;
       if (document.activeElement === input && event.key === "Enter" && !event.shiftKey) {
         event.preventDefault();
         sendTyped();
