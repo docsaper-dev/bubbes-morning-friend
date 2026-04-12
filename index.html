@@ -30,6 +30,7 @@
       align-items: center;
       justify-content: center;
       padding: 24px;
+      position: relative;
     }
     .welcome-card {
       width: 100%;
@@ -40,6 +41,14 @@
       box-shadow: 0 4px 20px rgba(0,0,0,0.06);
       text-align: center;
       padding: 40px 28px;
+      position: relative;
+    }
+    .version {
+      position: absolute;
+      top: 12px;
+      right: 18px;
+      font-size: 12px;
+      color: #94a3b8;
     }
     h1 {
       font-size: 2.2rem;
@@ -85,6 +94,7 @@
       font-size: 1.9rem;
       font-weight: 600;
       flex: 0 0 auto;
+      position: relative;
     }
     .chat-shell {
       flex: 1 1 auto;
@@ -196,6 +206,7 @@
 <body>
   <div id="welcome" class="welcome-screen">
     <div class="welcome-card">
+      <div class="version">v4</div>
       <h1>Bubbe's Morning Friend</h1>
       <div class="sub">A warm, simple companion to start your day.</div>
       <button class="primary" onclick="startConversation()">Start Conversation</button>
@@ -205,7 +216,10 @@
   </div>
 
   <div id="chat" class="chat-screen">
-    <div class="chat-header">Bubbe's Morning Friend</div>
+    <div class="chat-header">
+      Bubbe's Morning Friend
+      <span class="version">v4</span>
+    </div>
     <div class="chat-shell">
       <div class="chat-card">
         <div class="tip">Tip: You can tell me your name anytime, and I’ll remember it while we’re talking.</div>
