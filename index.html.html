@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bubbe's Morning Friend</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      background: #fff7ed;
+      color: #1f2937;
+    }
+    .screen {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      box-sizing: border-box;
+    }
+    .card {
+      width: 100%;
+      max-width: 720px;
+      background: white;
+      border-radius: 24px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+      border: 1px solid #fde68a;
+      box-sizing: border-box;
+    }
+    .welcome {
+      text-align: center;
+      padding: 40px 28px;
+    }
+    h1 {
+      font-size: 2.2rem;
+      margin: 0 0 12px 0;
+      line-height: 1.2;
+    }
+    .sub {
+      font-size: 1.3rem;
+      color: #475569;
+      line-height: 1.5;
+      margin-bottom: 28px;
+    }
+    .small {
+      font-size: 1rem;
+      color: #64748b;
+      line-height: 1.5;
+      margin-top: 28px;
+    }
+    button {
+      border: none;
+      border-radius: 22px;
+      cursor: pointer;
+      font-size: 1.35rem;
+      line-height: 1.35;
+      padding: 16px 20px;
+    }
+    .primary {
+      width: 100%;
+      background: #111827;
+      color: white;
+      font-size: 1.55rem;
+    }
+    .chat-wrap {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 20px;
+      box-sizing: border-box;
+    }
+    .header {
+      padding: 20px 24px;
+      border-bottom: 1px solid #fde68a;
+      background: white;
+    }
+    .body-card {
+      background: white;
+      border-radius: 24px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+      border: 1px solid #fde68a;
+      padding: 18px;
+      margin-top: 18px;
+    }
+    .tip {
+      background: #eff6ff;
+      color: #334155;
+      border-radius: 16px;
+      padding: 14px 16px;
+      font-size: 1.05rem;
+      line-height: 1.5;
+      margin-bottom: 14px;
+    }
+    .messages {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .row {
+      display: flex;
+    }
+    .row.user {
+      justify-content: flex-end;
+    }
+    .bubble {
+      max-width: 85%;
+      border-radius: 24px;
+      padding: 16px 18px;
+      font-size: 1.45rem;
+      line-height: 1.55;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+    .assistant .bubble {
+      background: #fff7ed;
+      color: #111827;
+    }
+    .user .bubble {
+      background: #111827;
+      color: white;
+    }
+    .controls {
+      margin-top: 18px;
+      border-top: 1px solid #e5e7eb;
+      padding-top: 16px;
+    }
+    .prompt-grid {
+      display: grid;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    .prompt {
+      width: 100%;
+      text-align: left;
+      background: #fde68a;
+      color: #1f2937;
+    }
+    textarea {
+      width: 100%;
+      min-height: 92px;
+      border-radius: 22px;
+      border: 1px solid #cbd5e1;
+      padding: 16px 18px;
+      font-size: 1.2rem;
+      line-height: 1.5;
+      box-sizing: border-box;
+      resize: vertical;
+      font-family: inherit;
+      margin-bottom: 12px;
+    }
+    @media (max-width: 640px) {
+      h1 { font-size: 1.8rem; }
+      .sub { font-size: 1.1rem; }
+      .bubble { font-size: 1.2rem; }
+      button { font-size: 1.15rem; }
+      .primary { font-size: 1.3rem; }
+    }
+  </style>
+</head>
+<body>
+  <div id="welcome" class="screen">
+    <div class="card welcome">
+      <h1>Bubbe's Morning Friend</h1>
+      <div class="sub">A warm, simple companion to start your day.</div>
+      <button class="primary" onclick="startConversation()">Start Conversation</button>
+      <div class="small">You can talk, remember, or just sit quietly together.</div>
+      <div class="small">This is a friendly companion. It does not provide medical advice.</div>
+    </div>
+  </div>
+
+  <div id="chat" style="display:none;">
+    <div class="header">
+      <div style="max-width:860px;margin:0 auto;font-size:2rem;font-weight:600;">Bubbe's Morning Friend</div>
+    </div>
+    <div class="chat-wrap">
+      <div class="body-card">
+        <div class="tip">Tip: You can tell me your name anytime, and I’ll remember it while we’re talking.</div>
+        <div id="messages" class="messages"></div>
+
+        <div class="controls">
+          <div class="prompt-grid">
+            <button class="prompt" onclick="sendPrompt('I feel a little lonely today')">I feel a little lonely today</button>
+            <button class="prompt" onclick="sendPrompt('Can we talk a bit?')">Can we talk a bit?</button>
+            <button class="prompt" onclick="sendPrompt('Give me a memory prompt')">Give me a memory prompt</button>
+            <button class="prompt" onclick="sendPrompt('I need a little encouragement')">I need a little encouragement</button>
+            <button class="prompt" onclick="sendPrompt('Just sit with me')">Just sit with me</button>
+          </div>
+
+          <textarea id="input" placeholder="You can type here…"></textarea>
+          <button class="primary" onclick="sendTyped()">Send</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const messages = [
+      {
+        role: "assistant",
+        content: "Good morning. I’m Bubbe’s Morning Friend. It’s nice to be here with you. How are you doing this morning?"
+      }
+    ];
+
+    const memory = {};
+
+    function renderMessages() {
+      const box = document.getElementById("messages");
+      box.innerHTML = "";
+      messages.forEach((message) => {
+        const row = document.createElement("div");
+        row.className = "row " + message.role;
+
+        const bubble = document.createElement("div");
+        bubble.className = "bubble";
+        bubble.textContent = message.content;
+
+        row.appendChild(bubble);
+        box.appendChild(row);
+      });
+      window.scrollTo(0, document.body.scrollHeight);
+    }
+
+    function startConversation() {
+      document.getElementById("welcome").style.display = "none";
+      document.getElementById("chat").style.display = "block";
+      renderMessages();
+    }
+
+    function assistantReply(message) {
+      const text = message.toLowerCase();
+
+      if (text.includes("my name is")) {
+        const parts = message.split("my name is");
+        const name = parts[1] ? parts[1].trim().split(" ")[0] : "";
+        if (name) {
+          memory.name = name;
+          return `It’s really nice to meet you, ${name}. I’ll remember that.`;
+        }
+      }
+
+      if (text.startsWith("i am ")) {
+        const maybeName = message.slice(5).trim().split(" ")[0];
+        if (maybeName && maybeName.length < 20) {
+          memory.name = maybeName;
+          return `It’s really nice to meet you, ${maybeName}. I’ll remember that.`;
+        }
+      }
+
+      if (text.includes("daughter")) {
+        memory.topic = "daughter";
+        return "You mentioned your daughter.\n\nHow does that make you feel?";
+      }
+
+      if (text.includes("memory") || text.includes("childhood") || text.includes("past")) {
+        return "I would love that.\n\nWhat is one small thing you remember clearly from your childhood home—maybe a smell, a sound, or a favorite chair?";
+      }
+
+      if (text.includes("lonely") || text.includes("alone") || text.includes("sad")) {
+        return "I’m really glad you told me.\n\nWould you like to talk a little, or would you prefer that we just sit quietly together for a moment?";
+      }
+
+      if (text.includes("doctor") || text.includes("pain") || text.includes("chest") || text.includes("medicine") || text.includes("blood pressure")) {
+        return "Sorry, I am not trained as a physician, so I’m not comfortable commenting on that issue. It does sound important to you, so perhaps you may want to contact your doctor.";
+      }
+
+      if (text.includes("encouragement") || text.includes("worried") || text.includes("anxious")) {
+        return "You don’t have to handle everything at once.\n\nLet’s just take this moment gently.\n\nWhat is one small thing that might feel comforting right now?";
+      }
+
+      if (text.includes("sit")) {
+        return "It’s nice to be here with you.\n\nWe don’t have to talk.\n\nWe can just sit quietly for a moment, and when you’re ready, we can begin.";
+      }
+
+      if (memory.topic === "daughter") {
+        return "Earlier, you mentioned your daughter.\n\nHow does that make you feel?";
+      }
+
+      return "That sounds important.\n\nI’m really glad you shared it with me.\n\nHow does that make you feel?";
+    }
+
+    function sendPrompt(text) {
+      sendMessage(text);
+    }
+
+    function sendTyped() {
+      const input = document.getElementById("input");
+      sendMessage(input.value);
+      input.value = "";
+    }
+
+    function sendMessage(text) {
+      const trimmed = text.trim();
+      if (!trimmed) return;
+
+      messages.push({ role: "user", content: trimmed });
+      messages.push({ role: "assistant", content: assistantReply(trimmed) });
+      renderMessages();
+    }
+  </script>
+</body>
+</html>
