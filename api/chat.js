@@ -22,6 +22,20 @@ Rules:
 - Do not claim to remember things beyond this conversation; stay in the present chat.
 - Keep replies concise (roughly 2–5 short paragraphs unless they ask for less).
 - Match the user's emotional pace; offer silence or quiet presence if they want to "just sit" together.`;
+const MEDICAL_RISK_RE = /\b(doctor|pain|chest|medicine|blood pressure|symptom|diagnosis|emergency|hospital)\b/i;
+
+function makeRequestId() {
+  return `bmf_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function isSafetyLoggingEnabled() {
+  return process.env.SAFETY_LOGGING !== "0";
+}
+
+function logSafety(event, payload) {
+  if (!isSafetyLoggingEnabled()) return;
+  console.log("[safety]", JSON.stringify({ event, ...payload }));
+}
 
 function sanitizeMessages(raw) {
   if (!Array.isArray(raw) || raw.length === 0) {
@@ -41,7 +55,10 @@ function sanitizeMessages(raw) {
 }
 
 module.exports = async (req, res) => {
+  const startedAt = Date.now();
+  const requestId = makeRequestId();
   res.setHeader("Content-Type", "application/json");
+  res.setHeader("X-Request-Id", requestId);
 
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
@@ -82,6 +99,15 @@ module.exports = async (req, res) => {
   }
 
   const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
+  const lastUserMessage = [...sanitized].reverse().find((m) => m.role === "user")?.content || "";
+  const hadMedicalRiskSignal = MEDICAL_RISK_RE.test(lastUserMessage);
+
+  logSafety("request_received", {
+    requestId,
+    model,
+    turnCount: sanitized.length,
+    hadMedicalRiskSignal,
+  });
 
   let openaiRes;
   try {
@@ -99,21 +125,50 @@ module.exports = async (req, res) => {
       }),
     });
   } catch (err) {
-    console.error("OpenAI fetch error", err);
+    logSafety("openai_unreachable", {
+      requestId,
+      model,
+      hadMedicalRiskSignal,
+      latencyMs: Date.now() - startedAt,
+      error: err?.message || "fetch_failed",
+    });
     return res.status(502).json({ error: "Could not reach OpenAI" });
   }
 
   const data = await openaiRes.json().catch(() => ({}));
   if (!openaiRes.ok) {
     const msg = data.error?.message || "OpenAI request failed";
-    console.error("OpenAI API error", data);
+    logSafety("openai_error", {
+      requestId,
+      model,
+      hadMedicalRiskSignal,
+      latencyMs: Date.now() - startedAt,
+      status: openaiRes.status,
+      errorCode: data.error?.code || null,
+      errorType: data.error?.type || null,
+      message: msg,
+    });
     return res.status(502).json({ error: msg });
   }
 
   const text = data.choices?.[0]?.message?.content?.trim();
   if (!text) {
+    logSafety("empty_model_response", {
+      requestId,
+      model,
+      hadMedicalRiskSignal,
+      latencyMs: Date.now() - startedAt,
+    });
     return res.status(502).json({ error: "Empty model response" });
   }
+
+  logSafety("request_succeeded", {
+    requestId,
+    model,
+    hadMedicalRiskSignal,
+    latencyMs: Date.now() - startedAt,
+    usage: data.usage || null,
+  });
 
   return res.status(200).json({ reply: text });
 };
