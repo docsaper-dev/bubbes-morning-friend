@@ -129,11 +129,33 @@
       background: var(--tip);
       color: #334155;
       border-radius: 16px;
-      padding: 14px 16px;
-      font-size: 1rem;
-      line-height: 1.45;
-      margin: 14px 14px 10px;
+      padding: 10px 12px;
+      font-size: 0.9rem;
+      line-height: 1.35;
+      margin: 6px 10px 8px;
       flex: 0 0 auto;
+    }
+    .tip details {
+      width: 100%;
+    }
+    .tip summary {
+      cursor: pointer;
+      font-weight: 600;
+      list-style: none;
+    }
+    .tip summary::-webkit-details-marker {
+      display: none;
+    }
+    .tip summary::after {
+      content: " (show)";
+      font-weight: 400;
+      color: #64748b;
+    }
+    .tip details[open] summary::after {
+      content: " (hide)";
+    }
+    .tip-content {
+      margin-top: 6px;
     }
     .messages {
       flex: 1 1 auto;
@@ -169,35 +191,38 @@
     }
     .controls {
       border-top: 1px solid #e5e7eb;
-      padding: 14px;
+      padding: 10px;
       flex: 0 0 auto;
       background: white;
     }
     .prompt-grid {
       display: grid;
-      gap: 10px;
-      margin-bottom: 12px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-bottom: 8px;
     }
     .prompt {
       width: 100%;
       text-align: left;
       background: var(--prompt);
       color: var(--text);
-      font-size: 1.15rem;
-      padding: 14px 18px;
+      font-size: 0.96rem;
+      line-height: 1.25;
+      border-radius: 14px;
+      padding: 10px 12px;
     }
     textarea {
       width: 100%;
-      min-height: 86px;
-      max-height: 160px;
-      border-radius: 20px;
+      min-height: 68px;
+      max-height: 130px;
+      border-radius: 14px;
       border: 1px solid #cbd5e1;
-      padding: 14px 16px;
-      font-size: 1.12rem;
-      line-height: 1.5;
+      padding: 10px 12px;
+      font-size: 0.98rem;
+      line-height: 1.4;
       resize: vertical;
       font-family: inherit;
-      margin-bottom: 10px;
+      margin-bottom: 8px;
     }
     @media (max-width: 640px) {
       h1 { font-size: 1.8rem; }
@@ -206,7 +231,8 @@
       .bubble { font-size: 1.15rem; }
       button { font-size: 1.08rem; }
       .primary { font-size: 1.25rem; }
-      .prompt { font-size: 1.02rem; }
+      .prompt-grid { grid-template-columns: 1fr; }
+      .prompt { font-size: 0.95rem; }
       textarea { font-size: 1rem; }
     }
   </style>
@@ -214,7 +240,7 @@
 <body>
   <div id="welcome" class="welcome-screen">
     <div class="welcome-card">
-      <div class="version">v6</div>
+      <div class="version">v7</div>
       <h1>Bubbe's Morning Friend</h1>
       <div class="sub">A warm, simple companion to start your day.</div>
       <button class="primary" onclick="startConversation()">Start Conversation</button>
@@ -226,11 +252,16 @@
   <div id="chat" class="chat-screen">
     <div class="chat-header">
       Bubbe's Morning Friend
-      <span class="version">v6</span>
+      <span class="version">v7</span>
     </div>
     <div class="chat-shell">
       <div class="chat-card">
-        <div class="tip">Tip: Replies use OpenAI on the server (your key stays private on Vercel). Tell me your name anytime—I’ll use it in this chat.</div>
+        <div class="tip">
+          <details id="tipToggle">
+            <summary>Tip</summary>
+            <div class="tip-content">Replies use OpenAI on the server (your key stays private on Vercel). Tell me your name anytime and I will use it in this chat.</div>
+          </details>
+        </div>
         <div id="messages" class="messages"></div>
 
         <div class="controls">
@@ -257,6 +288,7 @@
       }
     ];
 
+    const TIP_STORAGE_KEY = "bmf_tip_open";
     let busy = false;
 
     function renderMessages() {
@@ -286,6 +318,20 @@
       if (input) input.disabled = on;
       const sendBtn = document.getElementById("sendBtn");
       if (sendBtn) sendBtn.disabled = on;
+    }
+
+    function initTipState() {
+      const tip = document.getElementById("tipToggle");
+      if (!tip) return;
+      const saved = localStorage.getItem(TIP_STORAGE_KEY);
+      if (saved === "1") {
+        tip.open = true;
+      } else if (saved === "0") {
+        tip.open = false;
+      }
+      tip.addEventListener("toggle", () => {
+        localStorage.setItem(TIP_STORAGE_KEY, tip.open ? "1" : "0");
+      });
     }
 
     function startConversation() {
@@ -358,6 +404,8 @@
         sendTyped();
       }
     });
+
+    initTipState();
   </script>
 </body>
 </html>
