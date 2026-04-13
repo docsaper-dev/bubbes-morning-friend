@@ -240,7 +240,7 @@
 <body>
   <div id="welcome" class="welcome-screen">
     <div class="welcome-card">
-      <div class="version">v7</div>
+      <div class="version">v8</div>
       <h1>Bubbe's Morning Friend</h1>
       <div class="sub">A warm, simple companion to start your day.</div>
       <button class="primary" onclick="startConversation()">Start Conversation</button>
@@ -252,7 +252,7 @@
   <div id="chat" class="chat-screen">
     <div class="chat-header">
       Bubbe's Morning Friend
-      <span class="version">v7</span>
+      <span class="version">v8</span>
     </div>
     <div class="chat-shell">
       <div class="chat-card">
@@ -265,13 +265,7 @@
         <div id="messages" class="messages"></div>
 
         <div class="controls">
-          <div class="prompt-grid">
-            <button class="prompt" onclick="sendPrompt('I feel a little lonely today')">I feel a little lonely today</button>
-            <button class="prompt" onclick="sendPrompt('Can we talk a bit?')">Can we talk a bit?</button>
-            <button class="prompt" onclick="sendPrompt('Give me a memory prompt')">Give me a memory prompt</button>
-            <button class="prompt" onclick="sendPrompt('I need a little encouragement')">I need a little encouragement</button>
-            <button class="prompt" onclick="sendPrompt('Just sit with me')">Just sit with me</button>
-          </div>
+          <div class="prompt-grid" id="promptGrid"></div>
 
           <textarea id="input" placeholder="You can type here…"></textarea>
           <button type="button" class="primary" id="sendBtn" onclick="sendTyped()">Send</button>
@@ -289,6 +283,13 @@
     ];
 
     const TIP_STORAGE_KEY = "bmf_tip_open";
+    const DEFAULT_SUGGESTIONS = [
+      "I feel a little lonely today",
+      "Can we talk a bit?",
+      "Give me a memory prompt",
+      "I need a little encouragement",
+      "Just sit with me"
+    ];
     let busy = false;
 
     function renderMessages() {
@@ -308,6 +309,91 @@
       });
 
       box.scrollTop = box.scrollHeight;
+    }
+
+    function getTimeBucket() {
+      const hour = new Date().getHours();
+      if (hour < 12) return "morning";
+      if (hour < 18) return "afternoon";
+      return "evening";
+    }
+
+    function getRecentUserText() {
+      return messages
+        .filter((m) => m.role === "user")
+        .slice(-6)
+        .map((m) => m.content.toLowerCase())
+        .join(" ");
+    }
+
+    function topicFlags() {
+      const text = getRecentUserText();
+      return {
+        breakfast: /\bbreakfast|oatmeal|eggs|toast|coffee|hungry|recipe\b/.test(text),
+        lonely: /\blonely|alone|isolated|sad|down\b/.test(text),
+        memory: /\bmemory|childhood|past|remember\b/.test(text),
+        anxiety: /\bworried|anxious|nervous|stress|overwhelmed\b/.test(text),
+        family: /\bfamily|daughter|son|grandchild|husband|wife|friend\b/.test(text),
+        bored: /\bbored|boring|same|stale|routine\b/.test(text),
+      };
+    }
+
+    function buildSuggestions() {
+      const flags = topicFlags();
+      const bucket = getTimeBucket();
+      const suggestions = [];
+
+      if (flags.breakfast && flags.bored) {
+        suggestions.push("Easy breakfast options to try out");
+      }
+      if (flags.breakfast) {
+        suggestions.push("Can we brainstorm a different breakfast?");
+      }
+      if (flags.lonely) {
+        suggestions.push("Can you sit with me for a minute?");
+        suggestions.push("Could you ask me a gentle question?");
+      }
+      if (flags.memory) {
+        suggestions.push("Ask me another memory prompt");
+      }
+      if (flags.anxiety) {
+        suggestions.push("Help me slow down for a moment");
+      }
+      if (flags.family) {
+        suggestions.push("Can we talk about my family a little?");
+      }
+
+      if (bucket === "morning") {
+        suggestions.push("Help me ease into this morning");
+      } else if (bucket === "afternoon") {
+        suggestions.push("Can we do a gentle afternoon check-in?");
+      } else {
+        suggestions.push("Can we wind down this evening?");
+      }
+
+      suggestions.push(...DEFAULT_SUGGESTIONS);
+
+      const unique = [];
+      for (const s of suggestions) {
+        if (!unique.includes(s)) unique.push(s);
+      }
+      return unique.slice(0, 5);
+    }
+
+    function renderSuggestions() {
+      const grid = document.getElementById("promptGrid");
+      if (!grid) return;
+      const suggestions = buildSuggestions();
+      grid.innerHTML = "";
+      suggestions.forEach((text) => {
+        const btn = document.createElement("button");
+        btn.className = "prompt";
+        btn.type = "button";
+        btn.textContent = text;
+        btn.disabled = busy;
+        btn.addEventListener("click", () => sendPrompt(text));
+        grid.appendChild(btn);
+      });
     }
 
     function setBusy(on) {
@@ -338,6 +424,7 @@
       document.getElementById("welcome").style.display = "none";
       document.getElementById("chat").style.display = "flex";
       renderMessages();
+      renderSuggestions();
     }
 
     function sendPrompt(text) {
@@ -393,6 +480,7 @@
         busy = false;
         setBusy(false);
         renderMessages();
+        renderSuggestions();
       }
     }
 
@@ -406,6 +494,7 @@
     });
 
     initTipState();
+    renderSuggestions();
   </script>
 </body>
 </html>
