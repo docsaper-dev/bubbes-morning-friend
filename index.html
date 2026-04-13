@@ -352,10 +352,10 @@
             <option value="zh-CN">Chinese (Mandarin)</option>
             <option value="ja-JP">Japanese</option>
           </select>
-          <input id="profileFamily" class="profile-wide" type="text" placeholder="Family names (optional, comma-separated)" />
+          <input id="profileFamily" class="profile-wide" type="text" placeholder="Family first names (optional, comma-separated, e.g. Sarah, David)" />
         </div>
         <button type="button" class="save-profile-btn" onclick="saveProfile()">Save Profile</button>
-        <div class="profile-hint" id="profileHint">Used to personalize greetings and suggestions.</div>
+        <div class="profile-hint" id="profileHint">Used to personalize greetings and suggestions. Add first names, not surname.</div>
       </div>
       <button class="primary" onclick="startConversation()">Start Conversation</button>
       <div class="small">You can talk, remember, or just sit quietly together.</div>
@@ -542,7 +542,7 @@
         suggestions.push("Can we talk about my family a little?");
       }
       if (!flags.family && profile.family.length) {
-        suggestions.push(`How is ${profile.family[0]} doing lately?`);
+        suggestions.push(`Would you like to talk about ${profile.family[0]}?`);
       }
 
       if (bucket === "morning") {
