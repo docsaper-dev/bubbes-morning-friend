@@ -302,6 +302,39 @@
       margin-top: 6px;
       min-height: 1.1em;
     }
+    .voice-row {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 8px;
+      align-items: center;
+      margin-top: 8px;
+    }
+    .voice-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.86rem;
+      color: #334155;
+      white-space: nowrap;
+    }
+    .voice-select {
+      border: 1px solid #cbd5e1;
+      border-radius: 10px;
+      background: #fff;
+      color: #0f172a;
+      font-size: 0.85rem;
+      padding: 8px 10px;
+      min-width: 150px;
+      width: 100%;
+    }
+    .voice-stop-btn {
+      border-radius: 10px;
+      padding: 8px 10px;
+      font-size: 0.82rem;
+      background: #e2e8f0;
+      color: #0f172a;
+      min-width: 92px;
+    }
     .mic-language {
       border: 1px solid #cbd5e1;
       border-radius: 14px;
@@ -323,6 +356,7 @@
       textarea { font-size: 1rem; }
       .action-row { grid-template-columns: 1fr; }
       .mic-btn, .mic-language { width: 100%; }
+      .voice-row { grid-template-columns: 1fr; }
       .profile-grid { grid-template-columns: 1fr; }
       .profile-wide { grid-column: span 1; }
     }
@@ -331,7 +365,7 @@
 <body>
   <div id="welcome" class="welcome-screen">
     <div class="welcome-card">
-      <div class="version">v11</div>
+      <div class="version">v12</div>
       <h1>Bubbe's Morning Friend</h1>
       <div class="sub">A warm, simple companion to start your day.</div>
       <div class="profile-card">
@@ -366,7 +400,7 @@
   <div id="chat" class="chat-screen">
     <div class="chat-header">
       Bubbe's Morning Friend
-      <span class="version">v11</span>
+      <span class="version">v12</span>
     </div>
     <div class="chat-shell">
       <div class="chat-card">
@@ -401,6 +435,16 @@
             </select>
           </div>
           <div class="mic-status" id="micStatus"></div>
+          <div class="voice-row">
+            <label class="voice-toggle">
+              <input type="checkbox" id="voiceEnabled" onchange="updateVoiceSettings()" />
+              Read replies aloud
+            </label>
+            <select id="voiceSelect" class="voice-select" onchange="updateVoiceSettings()">
+              <option value="">System default voice</option>
+            </select>
+            <button type="button" class="voice-stop-btn" id="voiceStopBtn" onclick="stopSpeaking()">Stop Voice</button>
+          </div>
         </div>
       </div>
     </div>
@@ -409,10 +453,13 @@
   <script>
     let messages = [];
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const synth = window.speechSynthesis;
 
     const TIP_STORAGE_KEY = "bmf_tip_open";
     const MIC_LANG_STORAGE_KEY = "bmf_mic_lang";
     const PROFILE_STORAGE_KEY = "bmf_profile";
+    const VOICE_ENABLED_STORAGE_KEY = "bmf_voice_enabled";
+    const VOICE_NAME_STORAGE_KEY = "bmf_voice_name";
     const DAILY_BACKGROUNDS = [
       "https://images.unsplash.com/photo-1472396961693-142e6e269027?auto=format&fit=crop&w=1800&q=80",
       "https://images.unsplash.com/photo-1468327768560-75b778cbb551?auto=format&fit=crop&w=1800&q=80",
@@ -430,6 +477,7 @@
     let micSupported = false;
     let micListening = false;
     let recognition = null;
+    let availableVoices = [];
 
     function setDailyBackground() {
       const now = new Date();
@@ -597,6 +645,91 @@
       if (status) status.textContent = text || "";
     }
 
+    function readVoiceEnabled() {
+      return localStorage.getItem(VOICE_ENABLED_STORAGE_KEY) === "1";
+    }
+
+    function selectedVoiceName() {
+      return localStorage.getItem(VOICE_NAME_STORAGE_KEY) || "";
+    }
+
+    function refreshVoiceOptions() {
+      const select = document.getElementById("voiceSelect");
+      if (!select || !synth) return;
+
+      availableVoices = synth.getVoices();
+      const selected = selectedVoiceName();
+      select.innerHTML = '<option value="">System default voice</option>';
+      availableVoices.forEach((voice) => {
+        const option = document.createElement("option");
+        option.value = voice.name;
+        option.textContent = `${voice.name} (${voice.lang})`;
+        if (voice.name === selected) option.selected = true;
+        select.appendChild(option);
+      });
+    }
+
+    function updateVoiceControlState() {
+      const enabled = readVoiceEnabled();
+      const toggle = document.getElementById("voiceEnabled");
+      const select = document.getElementById("voiceSelect");
+      const stopBtn = document.getElementById("voiceStopBtn");
+      if (toggle) toggle.checked = enabled;
+      if (select) select.disabled = !enabled || !synth;
+      if (stopBtn) stopBtn.disabled = !synth;
+    }
+
+    function updateVoiceSettings() {
+      const toggle = document.getElementById("voiceEnabled");
+      const select = document.getElementById("voiceSelect");
+      const enabled = Boolean(toggle && toggle.checked);
+      localStorage.setItem(VOICE_ENABLED_STORAGE_KEY, enabled ? "1" : "0");
+      if (select) {
+        localStorage.setItem(VOICE_NAME_STORAGE_KEY, select.value || "");
+      }
+      if (!enabled) {
+        stopSpeaking();
+      }
+      updateVoiceControlState();
+    }
+
+    function stopSpeaking() {
+      if (synth) synth.cancel();
+    }
+
+    function speakText(text) {
+      if (!synth || !readVoiceEnabled()) return;
+      const message = (text || "").trim();
+      if (!message) return;
+
+      synth.cancel();
+      const utterance = new SpeechSynthesisUtterance(message);
+      const selected = selectedVoiceName();
+      if (selected) {
+        const voice = availableVoices.find((v) => v.name === selected);
+        if (voice) utterance.voice = voice;
+      }
+      synth.speak(utterance);
+    }
+
+    function initVoice() {
+      if (!synth) {
+        const toggle = document.getElementById("voiceEnabled");
+        const select = document.getElementById("voiceSelect");
+        const stopBtn = document.getElementById("voiceStopBtn");
+        if (toggle) toggle.disabled = true;
+        if (select) select.disabled = true;
+        if (stopBtn) stopBtn.disabled = true;
+        return;
+      }
+
+      refreshVoiceOptions();
+      if (typeof synth.onvoiceschanged !== "undefined") {
+        synth.onvoiceschanged = refreshVoiceOptions;
+      }
+      updateVoiceControlState();
+    }
+
     function updateMicButton() {
       const micBtn = document.getElementById("micBtn");
       if (!micBtn) return;
@@ -752,6 +885,7 @@
       document.getElementById("chat").style.display = "flex";
       renderMessages();
       renderSuggestions();
+      speakText(messages[0]?.content || "");
     }
 
     function sendPrompt(text) {
@@ -794,14 +928,17 @@
           throw new Error("Empty reply");
         }
         messages.push({ role: "assistant", content: reply });
+        speakText(reply);
       } catch (err) {
         const details = err && err.message ? `\n\nDetails: ${err.message}` : "";
+        const fallback =
+          "I’m having trouble reaching the gentle voice behind this page right now.\n\nPlease try again in a moment. If this keeps happening, confirm OPENAI_API_KEY is set for this project on Vercel (Settings → Environment Variables), redeploy, and use the live site URL—not a downloaded copy of the file." +
+          details;
         messages.push({
           role: "assistant",
-          content:
-            "I’m having trouble reaching the gentle voice behind this page right now.\n\nPlease try again in a moment. If this keeps happening, confirm OPENAI_API_KEY is set for this project on Vercel (Settings → Environment Variables), redeploy, and use the live site URL—not a downloaded copy of the file." +
-            details
+          content: fallback
         });
+        speakText(fallback);
       } finally {
         if (sendBtn) sendBtn.textContent = prevSendLabel;
         busy = false;
@@ -823,6 +960,7 @@
     initTipState();
     setDailyBackground();
     initProfileForm();
+    initVoice();
     initMic();
     initMessages();
     renderSuggestions();
