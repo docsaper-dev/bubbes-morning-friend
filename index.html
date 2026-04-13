@@ -224,6 +224,31 @@
       font-family: inherit;
       margin-bottom: 8px;
     }
+    .action-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      align-items: stretch;
+    }
+    .mic-btn {
+      min-width: 120px;
+      border-radius: 14px;
+      padding: 10px 12px;
+      font-size: 0.95rem;
+      background: #e2e8f0;
+      color: #0f172a;
+      white-space: nowrap;
+    }
+    .mic-btn.listening {
+      background: #fecaca;
+      color: #7f1d1d;
+    }
+    .mic-status {
+      font-size: 0.82rem;
+      color: #64748b;
+      margin-top: 6px;
+      min-height: 1.1em;
+    }
     @media (max-width: 640px) {
       h1 { font-size: 1.8rem; }
       .sub { font-size: 1.08rem; }
@@ -234,13 +259,15 @@
       .prompt-grid { grid-template-columns: 1fr; }
       .prompt { font-size: 0.95rem; }
       textarea { font-size: 1rem; }
+      .action-row { grid-template-columns: 1fr; }
+      .mic-btn { width: 100%; }
     }
   </style>
 </head>
 <body>
   <div id="welcome" class="welcome-screen">
     <div class="welcome-card">
-      <div class="version">v8</div>
+      <div class="version">v10</div>
       <h1>Bubbe's Morning Friend</h1>
       <div class="sub">A warm, simple companion to start your day.</div>
       <button class="primary" onclick="startConversation()">Start Conversation</button>
@@ -252,7 +279,7 @@
   <div id="chat" class="chat-screen">
     <div class="chat-header">
       Bubbe's Morning Friend
-      <span class="version">v8</span>
+      <span class="version">v10</span>
     </div>
     <div class="chat-shell">
       <div class="chat-card">
@@ -268,7 +295,11 @@
           <div class="prompt-grid" id="promptGrid"></div>
 
           <textarea id="input" placeholder="You can type here…"></textarea>
-          <button type="button" class="primary" id="sendBtn" onclick="sendTyped()">Send</button>
+          <div class="action-row">
+            <button type="button" class="primary" id="sendBtn" onclick="sendTyped()">Send</button>
+            <button type="button" class="mic-btn" id="micBtn" onclick="toggleMic()">Use Microphone</button>
+          </div>
+          <div class="mic-status" id="micStatus"></div>
         </div>
       </div>
     </div>
@@ -281,6 +312,7 @@
         content: "Good morning. I’m Bubbe’s Morning Friend. It’s nice to be here with you. How are you doing this morning?"
       }
     ];
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
     const TIP_STORAGE_KEY = "bmf_tip_open";
     const DEFAULT_SUGGESTIONS = [
@@ -291,6 +323,9 @@
       "Just sit with me"
     ];
     let busy = false;
+    let micSupported = false;
+    let micListening = false;
+    let recognition = null;
 
     function renderMessages() {
       const box = document.getElementById("messages");
@@ -404,6 +439,89 @@
       if (input) input.disabled = on;
       const sendBtn = document.getElementById("sendBtn");
       if (sendBtn) sendBtn.disabled = on;
+      const micBtn = document.getElementById("micBtn");
+      if (micBtn) micBtn.disabled = on || !micSupported;
+    }
+
+    function setMicStatus(text) {
+      const status = document.getElementById("micStatus");
+      if (status) status.textContent = text || "";
+    }
+
+    function updateMicButton() {
+      const micBtn = document.getElementById("micBtn");
+      if (!micBtn) return;
+      micBtn.classList.toggle("listening", micListening);
+      micBtn.textContent = micListening ? "Stop Listening" : "Use Microphone";
+      micBtn.disabled = busy || !micSupported;
+    }
+
+    function initMic() {
+      if (!SpeechRecognition) {
+        micSupported = false;
+        setMicStatus("Microphone input is not supported in this browser.");
+        updateMicButton();
+        return;
+      }
+
+      micSupported = true;
+      recognition = new SpeechRecognition();
+      recognition.lang = "en-US";
+      recognition.interimResults = true;
+      recognition.maxAlternatives = 1;
+      recognition.continuous = false;
+
+      recognition.onstart = () => {
+        micListening = true;
+        setMicStatus("Listening…");
+        updateMicButton();
+      };
+
+      recognition.onresult = (event) => {
+        let transcript = "";
+        for (let i = event.resultIndex; i < event.results.length; i += 1) {
+          transcript += event.results[i][0].transcript;
+        }
+        const input = document.getElementById("input");
+        if (input) input.value = transcript.trim();
+      };
+
+      recognition.onerror = (event) => {
+        if (event.error === "not-allowed") {
+          setMicStatus("Microphone permission was denied.");
+        } else if (event.error === "no-speech") {
+          setMicStatus("No speech detected. Try again.");
+        } else {
+          setMicStatus(`Microphone error: ${event.error}`);
+        }
+      };
+
+      recognition.onend = () => {
+        micListening = false;
+        updateMicButton();
+        if (!busy) {
+          const input = document.getElementById("input");
+          const finalText = input ? input.value.trim() : "";
+          if (finalText) {
+            sendTyped();
+          } else {
+            setMicStatus("Ready for microphone input.");
+          }
+        }
+      };
+
+      setMicStatus("Ready for microphone input.");
+      updateMicButton();
+    }
+
+    function toggleMic() {
+      if (!micSupported || !recognition || busy) return;
+      if (micListening) {
+        recognition.stop();
+        return;
+      }
+      setMicStatus("Starting microphone…");
+      recognition.start();
     }
 
     function initTipState() {
@@ -494,6 +612,7 @@
     });
 
     initTipState();
+    initMic();
     renderSuggestions();
   </script>
 </body>
