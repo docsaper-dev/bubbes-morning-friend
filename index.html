@@ -335,7 +335,7 @@
       <h1>Bubbe's Morning Friend</h1>
       <div class="sub">A warm, simple companion to start your day.</div>
       <div class="profile-card">
-        <div class="profile-title">Profile (saved on this device)</div>
+        <div class="profile-title">Optional personalization (saved on this device)</div>
         <div class="profile-grid">
           <input id="profileName" type="text" placeholder="Your name (optional)" />
           <select id="profileLanguage">
@@ -355,7 +355,7 @@
           <input id="profileFamily" class="profile-wide" type="text" placeholder="Family first names (optional, comma-separated, e.g. Sarah, David)" />
         </div>
         <button type="button" class="save-profile-btn" onclick="saveProfile()">Save Profile</button>
-        <div class="profile-hint" id="profileHint">Used to personalize greetings and suggestions. Add first names, not surname.</div>
+        <div class="profile-hint" id="profileHint">Optional. Helps personalize greetings and suggestions. Add first names of loved ones (not surname).</div>
       </div>
       <button class="primary" onclick="startConversation()">Start Conversation</button>
       <div class="small">You can talk, remember, or just sit quietly together.</div>
@@ -542,7 +542,7 @@
         suggestions.push("Can we talk about my family a little?");
       }
       if (!flags.family && profile.family.length) {
-        suggestions.push(`Would you like to talk about ${profile.family[0]}?`);
+        suggestions.push(`How is ${profile.family[0]} doing lately?`);
       }
 
       if (bucket === "morning") {
