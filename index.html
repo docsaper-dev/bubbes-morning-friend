@@ -460,6 +460,7 @@
     const PROFILE_STORAGE_KEY = "bmf_profile";
     const VOICE_ENABLED_STORAGE_KEY = "bmf_voice_enabled";
     const VOICE_NAME_STORAGE_KEY = "bmf_voice_name";
+    const MIC_AUTO_SEND_DELAY_MS = 1400;
     const DAILY_BACKGROUNDS = [
       "https://images.unsplash.com/photo-1472396961693-142e6e269027?auto=format&fit=crop&w=1800&q=80",
       "https://images.unsplash.com/photo-1468327768560-75b778cbb551?auto=format&fit=crop&w=1800&q=80",
@@ -478,6 +479,7 @@
     let micListening = false;
     let recognition = null;
     let availableVoices = [];
+    let micAutoSendTimer = null;
 
     function setDailyBackground() {
       const now = new Date();
@@ -708,7 +710,14 @@
       if (selected) {
         const voice = availableVoices.find((v) => v.name === selected);
         if (voice) utterance.voice = voice;
+      } else {
+        const fallbackVoice = availableVoices.find((v) =>
+          /jenny|zira|aria|samantha|female|google us english/i.test(v.name)
+        );
+        if (fallbackVoice) utterance.voice = fallbackVoice;
       }
+      utterance.rate = 0.92;
+      utterance.pitch = 0.95;
       synth.speak(utterance);
     }
 
@@ -754,7 +763,7 @@
       recognition.lang = localStorage.getItem(MIC_LANG_STORAGE_KEY) || profile.language || "en-US";
       recognition.interimResults = true;
       recognition.maxAlternatives = 1;
-      recognition.continuous = false;
+      recognition.continuous = true;
 
       recognition.onstart = () => {
         micListening = true;
@@ -788,7 +797,14 @@
           const input = document.getElementById("input");
           const finalText = input ? input.value.trim() : "";
           if (finalText) {
-            sendTyped();
+            setMicStatus("Pause detected. Sending in a moment…");
+            micAutoSendTimer = setTimeout(() => {
+              micAutoSendTimer = null;
+              const latest = input ? input.value.trim() : "";
+              if (latest && !busy && !micListening) {
+                sendTyped();
+              }
+            }, MIC_AUTO_SEND_DELAY_MS);
           } else {
             setMicStatus("Ready for microphone input.");
           }
@@ -802,6 +818,10 @@
 
     function toggleMic() {
       if (!micSupported || !recognition || busy) return;
+      if (micAutoSendTimer) {
+        clearTimeout(micAutoSendTimer);
+        micAutoSendTimer = null;
+      }
       if (micListening) {
         recognition.stop();
         return;
