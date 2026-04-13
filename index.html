@@ -67,6 +67,51 @@
       line-height: 1.5;
       margin-top: 24px;
     }
+    .profile-card {
+      margin: 18px auto 20px;
+      max-width: 560px;
+      text-align: left;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 14px;
+      padding: 12px;
+    }
+    .profile-title {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: #334155;
+      margin-bottom: 8px;
+    }
+    .profile-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .profile-grid input,
+    .profile-grid select {
+      width: 100%;
+      border: 1px solid #cbd5e1;
+      border-radius: 10px;
+      padding: 8px 10px;
+      font-size: 0.9rem;
+      background: #fff;
+    }
+    .profile-wide {
+      grid-column: span 2;
+    }
+    .profile-hint {
+      color: #64748b;
+      font-size: 0.8rem;
+      margin-top: 6px;
+    }
+    .save-profile-btn {
+      margin-top: 8px;
+      border-radius: 10px;
+      padding: 8px 10px;
+      font-size: 0.85rem;
+      background: #e2e8f0;
+      color: #0f172a;
+    }
     button {
       border: none;
       border-radius: 22px;
@@ -270,15 +315,40 @@
       textarea { font-size: 1rem; }
       .action-row { grid-template-columns: 1fr; }
       .mic-btn, .mic-language { width: 100%; }
+      .profile-grid { grid-template-columns: 1fr; }
+      .profile-wide { grid-column: span 1; }
     }
   </style>
 </head>
 <body>
   <div id="welcome" class="welcome-screen">
     <div class="welcome-card">
-      <div class="version">v10</div>
+      <div class="version">v11</div>
       <h1>Bubbe's Morning Friend</h1>
       <div class="sub">A warm, simple companion to start your day.</div>
+      <div class="profile-card">
+        <div class="profile-title">Profile (saved on this device)</div>
+        <div class="profile-grid">
+          <input id="profileName" type="text" placeholder="Your name (optional)" />
+          <select id="profileLanguage">
+            <option value="en-US">English (US)</option>
+            <option value="en-GB">English (UK)</option>
+            <option value="es-ES">Spanish</option>
+            <option value="fr-FR">French</option>
+            <option value="de-DE">German</option>
+            <option value="it-IT">Italian</option>
+            <option value="pt-BR">Portuguese (BR)</option>
+            <option value="he-IL">Hebrew</option>
+            <option value="ru-RU">Russian</option>
+            <option value="ar-SA">Arabic</option>
+            <option value="zh-CN">Chinese (Mandarin)</option>
+            <option value="ja-JP">Japanese</option>
+          </select>
+          <input id="profileFamily" class="profile-wide" type="text" placeholder="Family names (optional, comma-separated)" />
+        </div>
+        <button type="button" class="save-profile-btn" onclick="saveProfile()">Save Profile</button>
+        <div class="profile-hint" id="profileHint">Used to personalize greetings and suggestions.</div>
+      </div>
       <button class="primary" onclick="startConversation()">Start Conversation</button>
       <div class="small">You can talk, remember, or just sit quietly together.</div>
       <div class="small">This is a friendly companion. It does not provide medical advice.</div>
@@ -288,7 +358,7 @@
   <div id="chat" class="chat-screen">
     <div class="chat-header">
       Bubbe's Morning Friend
-      <span class="version">v10</span>
+      <span class="version">v11</span>
     </div>
     <div class="chat-shell">
       <div class="chat-card">
@@ -329,16 +399,12 @@
   </div>
 
   <script>
-    const messages = [
-      {
-        role: "assistant",
-        content: "Good morning. I’m Bubbe’s Morning Friend. It’s nice to be here with you. How are you doing this morning?"
-      }
-    ];
+    let messages = [];
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
     const TIP_STORAGE_KEY = "bmf_tip_open";
     const MIC_LANG_STORAGE_KEY = "bmf_mic_lang";
+    const PROFILE_STORAGE_KEY = "bmf_profile";
     const DEFAULT_SUGGESTIONS = [
       "I feel a little lonely today",
       "Can we talk a bit?",
@@ -350,6 +416,34 @@
     let micSupported = false;
     let micListening = false;
     let recognition = null;
+
+    function readProfile() {
+      try {
+        const raw = localStorage.getItem(PROFILE_STORAGE_KEY);
+        const parsed = raw ? JSON.parse(raw) : {};
+        return {
+          name: typeof parsed.name === "string" ? parsed.name.trim().slice(0, 40) : "",
+          language: typeof parsed.language === "string" ? parsed.language : "en-US",
+          family: Array.isArray(parsed.family) ? parsed.family.slice(0, 6) : [],
+        };
+      } catch {
+        return { name: "", language: "en-US", family: [] };
+      }
+    }
+
+    function writeProfile(profile) {
+      localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(profile));
+    }
+
+    function buildOpeningGreeting() {
+      const profile = readProfile();
+      const namePart = profile.name ? `, ${profile.name}` : "";
+      return `Good morning${namePart}. I’m Bubbe’s Morning Friend. It’s nice to be here with you. How are you doing this morning?`;
+    }
+
+    function initMessages() {
+      messages = [{ role: "assistant", content: buildOpeningGreeting() }];
+    }
 
     function renderMessages() {
       const box = document.getElementById("messages");
@@ -398,6 +492,7 @@
     }
 
     function buildSuggestions() {
+      const profile = readProfile();
       const flags = topicFlags();
       const bucket = getTimeBucket();
       const suggestions = [];
@@ -420,6 +515,9 @@
       }
       if (flags.family) {
         suggestions.push("Can we talk about my family a little?");
+      }
+      if (!flags.family && profile.family.length) {
+        suggestions.push(`How is ${profile.family[0]} doing lately?`);
       }
 
       if (bucket === "morning") {
@@ -494,7 +592,8 @@
 
       micSupported = true;
       recognition = new SpeechRecognition();
-      recognition.lang = localStorage.getItem(MIC_LANG_STORAGE_KEY) || "en-US";
+      const profile = readProfile();
+      recognition.lang = localStorage.getItem(MIC_LANG_STORAGE_KEY) || profile.language || "en-US";
       recognition.interimResults = true;
       recognition.maxAlternatives = 1;
       recognition.continuous = false;
@@ -569,6 +668,45 @@
       localStorage.setItem(MIC_LANG_STORAGE_KEY, selected);
     }
 
+    function initProfileForm() {
+      const profile = readProfile();
+      const nameInput = document.getElementById("profileName");
+      const languageInput = document.getElementById("profileLanguage");
+      const familyInput = document.getElementById("profileFamily");
+      if (nameInput) nameInput.value = profile.name;
+      if (languageInput) languageInput.value = profile.language;
+      if (familyInput) familyInput.value = profile.family.join(", ");
+    }
+
+    function saveProfile() {
+      const nameInput = document.getElementById("profileName");
+      const languageInput = document.getElementById("profileLanguage");
+      const familyInput = document.getElementById("profileFamily");
+      const hint = document.getElementById("profileHint");
+
+      const familyList = (familyInput?.value || "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .slice(0, 6);
+
+      const profile = {
+        name: (nameInput?.value || "").trim().slice(0, 40),
+        language: languageInput?.value || "en-US",
+        family: familyList,
+      };
+      writeProfile(profile);
+      localStorage.setItem(MIC_LANG_STORAGE_KEY, profile.language);
+
+      const micLanguage = document.getElementById("micLanguage");
+      if (micLanguage) micLanguage.value = profile.language;
+      if (recognition) recognition.lang = profile.language;
+
+      if (hint) {
+        hint.textContent = "Profile saved. It will be used for greetings and suggestions.";
+      }
+    }
+
     function initTipState() {
       const tip = document.getElementById("tipToggle");
       if (!tip) return;
@@ -584,6 +722,7 @@
     }
 
     function startConversation() {
+      initMessages();
       document.getElementById("welcome").style.display = "none";
       document.getElementById("chat").style.display = "flex";
       renderMessages();
@@ -657,7 +796,9 @@
     });
 
     initTipState();
+    initProfileForm();
     initMic();
+    initMessages();
     renderSuggestions();
   </script>
 </body>
