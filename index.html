@@ -335,10 +335,12 @@
         }
         messages.push({ role: "assistant", content: reply });
       } catch (err) {
+        const details = err && err.message ? `\n\nDetails: ${err.message}` : "";
         messages.push({
           role: "assistant",
           content:
-            "I’m having trouble reaching the gentle voice behind this page right now.\n\nPlease try again in a moment. If this keeps happening, confirm OPENAI_API_KEY is set for this project on Vercel (Settings → Environment Variables), redeploy, and use the live site URL—not a downloaded copy of the file."
+            "I’m having trouble reaching the gentle voice behind this page right now.\n\nPlease try again in a moment. If this keeps happening, confirm OPENAI_API_KEY is set for this project on Vercel (Settings → Environment Variables), redeploy, and use the live site URL—not a downloaded copy of the file." +
+            details
         });
       } finally {
         if (sendBtn) sendBtn.textContent = prevSendLabel;

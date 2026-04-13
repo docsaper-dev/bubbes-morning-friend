@@ -53,18 +53,27 @@ module.exports = async (req, res) => {
     return res.status(503).json({ error: "OpenAI is not configured (missing OPENAI_API_KEY)." });
   }
 
-  let raw;
-  try {
-    raw = await readBody(req);
-  } catch {
-    return res.status(413).json({ error: "Request too large" });
+  let body = req.body;
+  if (typeof body === "string") {
+    try {
+      body = body ? JSON.parse(body) : {};
+    } catch {
+      return res.status(400).json({ error: "Invalid JSON" });
+    }
   }
 
-  let body;
-  try {
-    body = raw ? JSON.parse(raw) : {};
-  } catch {
-    return res.status(400).json({ error: "Invalid JSON" });
+  if (!body || typeof body !== "object") {
+    let raw;
+    try {
+      raw = await readBody(req);
+    } catch {
+      return res.status(413).json({ error: "Request too large" });
+    }
+    try {
+      body = raw ? JSON.parse(raw) : {};
+    } catch {
+      return res.status(400).json({ error: "Invalid JSON" });
+    }
   }
 
   const sanitized = sanitizeMessages(body.messages);
