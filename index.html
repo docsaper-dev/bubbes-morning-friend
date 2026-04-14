@@ -75,6 +75,19 @@
       line-height: 1.5;
       margin-top: 24px;
     }
+    .welcome-actions {
+      display: grid;
+      gap: 8px;
+      margin-top: 14px;
+    }
+    .secondary-main {
+      width: 100%;
+      background: #e2e8f0;
+      color: #0f172a;
+      font-size: 1rem;
+      padding: 12px 14px;
+      border-radius: 14px;
+    }
     .profile-card {
       margin: 18px auto 20px;
       max-width: 560px;
@@ -156,6 +169,17 @@
       font-weight: 600;
       flex: 0 0 auto;
       position: relative;
+    }
+    .new-topic-btn {
+      position: absolute;
+      right: 16px;
+      top: 50%;
+      transform: translateY(-50%);
+      border-radius: 10px;
+      padding: 7px 10px;
+      font-size: 0.78rem;
+      background: #e2e8f0;
+      color: #0f172a;
     }
     .chat-shell {
       flex: 1 1 auto;
@@ -457,7 +481,7 @@
 <body>
   <div id="welcome" class="welcome-screen">
     <div class="welcome-card">
-      <div class="version">v14</div>
+      <div class="version">v15</div>
       <h1>Bubbe's Morning Friend</h1>
       <div class="sub">A warm, simple companion to start your day.</div>
       <div class="profile-card">
@@ -483,7 +507,10 @@
         <button type="button" class="save-profile-btn" onclick="saveProfile()">Save Profile</button>
         <div class="profile-hint" id="profileHint">Optional. Helps personalize greetings and suggestions. Add first names of loved ones (not surname).</div>
       </div>
-      <button class="primary" onclick="startConversation()">Start Conversation</button>
+      <div class="welcome-actions">
+        <button id="resumeBtn" class="primary" onclick="startConversation('resume')">Resume last conversation</button>
+        <button id="newTopicWelcomeBtn" class="secondary-main" onclick="startConversation('new')">Begin a new topic</button>
+      </div>
       <div class="small">You can talk, remember, or just sit quietly together.</div>
       <div class="small">This is a friendly companion. It does not provide medical advice.</div>
     </div>
@@ -492,7 +519,8 @@
   <div id="chat" class="chat-screen">
     <div class="chat-header">
       Bubbe's Morning Friend
-      <span class="version">v14</span>
+      <span class="version">v15</span>
+      <button type="button" class="new-topic-btn" onclick="beginNewTopic()">New topic</button>
     </div>
     <div class="chat-shell">
       <div class="chat-card">
@@ -587,6 +615,7 @@
     const VOICE_PITCH_STORAGE_KEY = "bmf_voice_pitch";
     const VOICE_PRESET_STORAGE_KEY = "bmf_voice_preset";
     const MIC_AUTO_SEND_DELAY_STORAGE_KEY = "bmf_mic_auto_send_ms";
+    const CONVERSATION_STORAGE_KEY = "bmf_conversation";
     const DAILY_BACKGROUNDS = [
       "https://images.unsplash.com/photo-1472396961693-142e6e269027?auto=format&fit=crop&w=1800&q=80",
       "https://images.unsplash.com/photo-1468327768560-75b778cbb551?auto=format&fit=crop&w=1800&q=80",
@@ -648,6 +677,44 @@
       messages = [{ role: "assistant", content: buildOpeningGreeting() }];
     }
 
+    function sanitizeConversation(raw) {
+      if (!Array.isArray(raw)) return null;
+      const cleaned = raw
+        .filter((m) => m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string")
+        .map((m) => ({ role: m.role, content: m.content.trim().slice(0, 8000) }))
+        .filter((m) => m.content);
+      return cleaned.length ? cleaned.slice(-40) : null;
+    }
+
+    function loadConversation() {
+      try {
+        const raw = localStorage.getItem(CONVERSATION_STORAGE_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        return sanitizeConversation(parsed);
+      } catch {
+        return null;
+      }
+    }
+
+    function saveConversation() {
+      const cleaned = sanitizeConversation(messages);
+      if (!cleaned) return;
+      localStorage.setItem(CONVERSATION_STORAGE_KEY, JSON.stringify(cleaned));
+    }
+
+    function hasSavedConversation() {
+      return Boolean(loadConversation());
+    }
+
+    function updateWelcomeActions() {
+      const resumeBtn = document.getElementById("resumeBtn");
+      const newBtn = document.getElementById("newTopicWelcomeBtn");
+      const hasSaved = hasSavedConversation();
+      if (resumeBtn) resumeBtn.style.display = hasSaved ? "block" : "none";
+      if (newBtn) newBtn.textContent = hasSaved ? "Begin a new topic" : "Start conversation";
+    }
+
     function renderMessages() {
       const box = document.getElementById("messages");
       box.innerHTML = "";
@@ -665,6 +732,7 @@
       });
 
       box.scrollTop = box.scrollHeight;
+      saveConversation();
     }
 
     function getTimeBucket() {
@@ -1195,12 +1263,38 @@
       });
     }
 
-    function startConversation() {
-      initMessages();
+    function startConversation(mode) {
+      const shouldResume = mode === "resume";
+      const saved = shouldResume ? loadConversation() : null;
+      if (saved) {
+        messages = saved;
+      } else {
+        initMessages();
+      }
       document.getElementById("welcome").style.display = "none";
       document.getElementById("chat").style.display = "flex";
       renderMessages();
       renderSuggestions();
+      if (!saved) {
+        speakText(messages[0]?.content || "");
+      }
+    }
+
+    function beginNewTopic() {
+      if (micAutoSendTimer) {
+        clearTimeout(micAutoSendTimer);
+        micAutoSendTimer = null;
+      }
+      if (recognition && micListening) {
+        recognition.stop();
+      }
+      stopSpeaking();
+      micCommittedText = "";
+      initMessages();
+      renderMessages();
+      renderSuggestions();
+      setMicState("ready");
+      setMicStatus("Ready for microphone input.");
       speakText(messages[0]?.content || "");
     }
 
@@ -1284,6 +1378,7 @@
     initMicControls();
     initMic();
     initMessages();
+    updateWelcomeActions();
     renderSuggestions();
   </script>
 </body>
