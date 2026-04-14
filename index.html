@@ -481,7 +481,7 @@
 <body>
   <div id="welcome" class="welcome-screen">
     <div class="welcome-card">
-      <div class="version">v15</div>
+      <div class="version">v16</div>
       <h1>Bubbe's Morning Friend</h1>
       <div class="sub">A warm, simple companion to start your day.</div>
       <div class="profile-card">
@@ -519,7 +519,7 @@
   <div id="chat" class="chat-screen">
     <div class="chat-header">
       Bubbe's Morning Friend
-      <span class="version">v15</span>
+      <span class="version">v16</span>
       <button type="button" class="new-topic-btn" onclick="beginNewTopic()">New topic</button>
     </div>
     <div class="chat-shell">
@@ -614,6 +614,7 @@
     const VOICE_RATE_STORAGE_KEY = "bmf_voice_rate";
     const VOICE_PITCH_STORAGE_KEY = "bmf_voice_pitch";
     const VOICE_PRESET_STORAGE_KEY = "bmf_voice_preset";
+    const VOICE_MODE_STORAGE_KEY = "bmf_voice_mode";
     const MIC_AUTO_SEND_DELAY_STORAGE_KEY = "bmf_mic_auto_send_ms";
     const CONVERSATION_STORAGE_KEY = "bmf_conversation";
     const DAILY_BACKGROUNDS = [
@@ -637,8 +638,10 @@
     let micAutoSendTimer = null;
     let micSilenceTimer = null;
     let micEndedBySilence = false;
+    let skipNextMicEndSend = false;
     let micState = "ready";
     let micCommittedText = "";
+    let aiSpeaking = false;
 
     function setDailyBackground() {
       const now = new Date();
@@ -887,6 +890,16 @@
       return 4000;
     }
 
+    function isVoiceModeEnabled() {
+      const saved = localStorage.getItem(VOICE_MODE_STORAGE_KEY);
+      if (saved === null) return true;
+      return saved === "1";
+    }
+
+    function setVoiceModeEnabled(on) {
+      localStorage.setItem(VOICE_MODE_STORAGE_KEY, on ? "1" : "0");
+    }
+
     function updateMicDelay() {
       const select = document.getElementById("micDelay");
       if (!select) return;
@@ -1018,6 +1031,8 @@
 
     function stopSpeaking() {
       if (synth) synth.cancel();
+      aiSpeaking = false;
+      maybeStartVoiceListening();
     }
 
     function speakText(text) {
@@ -1025,7 +1040,12 @@
       const message = (text || "").trim();
       if (!message) return;
 
+      if (recognition && micListening) {
+        skipNextMicEndSend = true;
+        recognition.stop();
+      }
       synth.cancel();
+      aiSpeaking = true;
       const utterance = new SpeechSynthesisUtterance(message);
       const selected = selectedVoiceName();
       if (selected) {
@@ -1039,6 +1059,14 @@
       }
       utterance.rate = getVoiceRate();
       utterance.pitch = getVoicePitch();
+      utterance.onend = () => {
+        aiSpeaking = false;
+        maybeStartVoiceListening();
+      };
+      utterance.onerror = () => {
+        aiSpeaking = false;
+        maybeStartVoiceListening();
+      };
       synth.speak(utterance);
     }
 
@@ -1079,7 +1107,8 @@
       const micBtn = document.getElementById("micBtn");
       if (!micBtn) return;
       micBtn.classList.toggle("listening", micListening);
-      micBtn.textContent = micListening ? "Stop Listening" : "Use Microphone";
+      const modeOn = isVoiceModeEnabled();
+      micBtn.textContent = modeOn ? "Voice Mode: On" : "Voice Mode: Off";
       micBtn.disabled = busy || !micSupported;
       const micLanguage = document.getElementById("micLanguage");
       if (micLanguage) micLanguage.disabled = busy || micListening || !micSupported;
@@ -1088,6 +1117,15 @@
       const micSendNowBtn = document.getElementById("micSendNowBtn");
       const input = document.getElementById("input");
       if (micSendNowBtn) micSendNowBtn.disabled = busy || !(input && input.value.trim());
+    }
+
+    function maybeStartVoiceListening() {
+      if (!micSupported || !recognition) return;
+      if (!isVoiceModeEnabled() || micListening || busy || aiSpeaking) return;
+      try {
+        setMicStatus("Listening for your voice...");
+        recognition.start();
+      } catch {}
     }
 
     function initMic() {
@@ -1138,18 +1176,26 @@
       recognition.onerror = (event) => {
         if (event.error === "not-allowed") {
           setMicStatus("Microphone permission was denied.");
+          setVoiceModeEnabled(false);
         } else if (event.error === "no-speech") {
           setMicStatus("No speech detected. Try again.");
         } else {
           setMicStatus(`Microphone error: ${event.error}`);
         }
         setMicState("ready");
+        updateMicButton();
       };
 
       recognition.onend = () => {
         micListening = false;
         clearMicSilenceTimer();
         updateMicButton();
+        if (skipNextMicEndSend) {
+          skipNextMicEndSend = false;
+          setMicState("ready");
+          maybeStartVoiceListening();
+          return;
+        }
         if (!busy) {
           const input = document.getElementById("input");
           const finalText = input ? input.value.trim() : "";
@@ -1173,28 +1219,37 @@
           }
         }
         micEndedBySilence = false;
+        maybeStartVoiceListening();
       };
 
       setMicStatus("Ready for microphone input.");
       setMicState("ready");
       updateMicButton();
       updateMicLanguage();
+      maybeStartVoiceListening();
     }
 
     function toggleMic() {
       if (!micSupported || !recognition || busy) return;
-      if (micAutoSendTimer) {
-        clearTimeout(micAutoSendTimer);
-        micAutoSendTimer = null;
+      const next = !isVoiceModeEnabled();
+      setVoiceModeEnabled(next);
+      if (!next) {
+        if (micAutoSendTimer) {
+          clearTimeout(micAutoSendTimer);
+          micAutoSendTimer = null;
+        }
+        clearMicSilenceTimer();
+        if (micListening) {
+          skipNextMicEndSend = true;
+          recognition.stop();
+        }
+        setMicStatus("Voice mode is off.");
+        setMicState("ready");
+      } else {
+        setMicStatus("Voice mode is on.");
+        maybeStartVoiceListening();
       }
-      clearMicSilenceTimer();
-      if (micListening) {
-        micEndedBySilence = false;
-        recognition.stop();
-        return;
-      }
-      setMicStatus("Starting microphone…");
-      recognition.start();
+      updateMicButton();
     }
 
     function sendNowFromMic() {
@@ -1206,6 +1261,7 @@
       clearMicSilenceTimer();
       if (micListening && recognition) {
         micEndedBySilence = false;
+        skipNextMicEndSend = true;
         recognition.stop();
       }
       const input = document.getElementById("input");
@@ -1309,6 +1365,7 @@
       if (!saved) {
         speakText(messages[0]?.content || "");
       }
+      maybeStartVoiceListening();
     }
 
     function beginNewTopic() {
@@ -1327,6 +1384,7 @@
       setMicState("ready");
       setMicStatus("Ready for microphone input.");
       speakText(messages[0]?.content || "");
+      maybeStartVoiceListening();
     }
 
     function sendPrompt(text) {
@@ -1390,6 +1448,7 @@
         renderMessages();
         renderSuggestions();
         updateMicButton();
+        maybeStartVoiceListening();
       }
     }
 
