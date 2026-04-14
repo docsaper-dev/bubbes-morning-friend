@@ -503,6 +503,7 @@
     let recognition = null;
     let availableVoices = [];
     let micAutoSendTimer = null;
+    let micCommittedText = "";
 
     function setDailyBackground() {
       const now = new Date();
@@ -790,17 +791,27 @@
 
       recognition.onstart = () => {
         micListening = true;
+        const input = document.getElementById("input");
+        micCommittedText = input ? input.value.trim() : "";
         setMicStatus("Listening…");
         updateMicButton();
       };
 
       recognition.onresult = (event) => {
-        let transcript = "";
+        let interim = "";
         for (let i = event.resultIndex; i < event.results.length; i += 1) {
-          transcript += event.results[i][0].transcript;
+          const piece = event.results[i][0].transcript.trim();
+          if (!piece) continue;
+          if (event.results[i].isFinal) {
+            micCommittedText = `${micCommittedText} ${piece}`.trim();
+          } else {
+            interim = `${interim} ${piece}`.trim();
+          }
         }
         const input = document.getElementById("input");
-        if (input) input.value = transcript.trim();
+        if (input) {
+          input.value = `${micCommittedText} ${interim}`.trim();
+        }
       };
 
       recognition.onerror = (event) => {
@@ -825,10 +836,12 @@
               micAutoSendTimer = null;
               const latest = input ? input.value.trim() : "";
               if (latest && !busy && !micListening) {
+                micCommittedText = "";
                 sendTyped();
               }
             }, MIC_AUTO_SEND_DELAY_MS);
           } else {
+            micCommittedText = "";
             setMicStatus("Ready for microphone input.");
           }
         }
