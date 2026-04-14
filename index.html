@@ -635,6 +635,8 @@
     let recognition = null;
     let availableVoices = [];
     let micAutoSendTimer = null;
+    let micSilenceTimer = null;
+    let micEndedBySilence = false;
     let micState = "ready";
     let micCommittedText = "";
 
@@ -858,6 +860,25 @@
         sending: "Mic: Sending...",
       };
       node.textContent = labels[nextState] || "Mic: Ready";
+    }
+
+    function clearMicSilenceTimer() {
+      if (micSilenceTimer) {
+        clearTimeout(micSilenceTimer);
+        micSilenceTimer = null;
+      }
+    }
+
+    function scheduleMicSilenceTimeout() {
+      clearMicSilenceTimer();
+      if (!micListening || !recognition) return;
+      micSilenceTimer = setTimeout(() => {
+        if (!micListening || !recognition) return;
+        micEndedBySilence = true;
+        setMicStatus("Silence detected. Wrapping up...");
+        setMicState("paused");
+        recognition.stop();
+      }, getMicAutoSendDelayMs());
     }
 
     function getMicAutoSendDelayMs() {
@@ -1087,11 +1108,13 @@
 
       recognition.onstart = () => {
         micListening = true;
+        micEndedBySilence = false;
         const input = document.getElementById("input");
         micCommittedText = input ? input.value.trim() : "";
         setMicStatus("Listening…");
         setMicState("listening");
         updateMicButton();
+        scheduleMicSilenceTimeout();
       };
 
       recognition.onresult = (event) => {
@@ -1109,6 +1132,7 @@
         if (input) {
           input.value = `${micCommittedText} ${interim}`.trim();
         }
+        scheduleMicSilenceTimeout();
       };
 
       recognition.onerror = (event) => {
@@ -1124,12 +1148,14 @@
 
       recognition.onend = () => {
         micListening = false;
+        clearMicSilenceTimer();
         updateMicButton();
         if (!busy) {
           const input = document.getElementById("input");
           const finalText = input ? input.value.trim() : "";
           if (finalText) {
-            setMicStatus("Pause detected. Sending in a moment…");
+            const delay = micEndedBySilence ? 250 : getMicAutoSendDelayMs();
+            setMicStatus(micEndedBySilence ? "Sending now..." : "Pause detected. Sending in a moment…");
             setMicState("paused");
             micAutoSendTimer = setTimeout(() => {
               micAutoSendTimer = null;
@@ -1139,13 +1165,14 @@
                 setMicState("sending");
                 sendTyped();
               }
-            }, getMicAutoSendDelayMs());
+            }, delay);
           } else {
             micCommittedText = "";
             setMicStatus("Ready for microphone input.");
             setMicState("ready");
           }
         }
+        micEndedBySilence = false;
       };
 
       setMicStatus("Ready for microphone input.");
@@ -1160,7 +1187,9 @@
         clearTimeout(micAutoSendTimer);
         micAutoSendTimer = null;
       }
+      clearMicSilenceTimer();
       if (micListening) {
+        micEndedBySilence = false;
         recognition.stop();
         return;
       }
@@ -1174,7 +1203,9 @@
         clearTimeout(micAutoSendTimer);
         micAutoSendTimer = null;
       }
+      clearMicSilenceTimer();
       if (micListening && recognition) {
+        micEndedBySilence = false;
         recognition.stop();
       }
       const input = document.getElementById("input");
