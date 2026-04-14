@@ -354,6 +354,45 @@
       align-items: center;
       margin-top: 8px;
     }
+    .voice-controls {
+      margin-top: 8px;
+      display: grid;
+      grid-template-columns: 1fr 1fr auto auto;
+      gap: 8px;
+      align-items: center;
+    }
+    .voice-control {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 6px;
+      align-items: center;
+      font-size: 0.8rem;
+      color: #334155;
+    }
+    .voice-control input[type="range"] {
+      width: 100%;
+    }
+    .voice-preset {
+      border: 1px solid #cbd5e1;
+      border-radius: 10px;
+      background: #fff;
+      color: #0f172a;
+      font-size: 0.82rem;
+      padding: 7px 10px;
+    }
+    .voice-preview-btn {
+      border-radius: 10px;
+      padding: 8px 10px;
+      font-size: 0.82rem;
+      background: #e2e8f0;
+      color: #0f172a;
+      min-width: 96px;
+    }
+    .voice-meta {
+      margin-top: 6px;
+      font-size: 0.78rem;
+      color: #64748b;
+    }
     .voice-toggle {
       display: inline-flex;
       align-items: center;
@@ -408,6 +447,7 @@
       .action-row { grid-template-columns: 1fr; }
       .mic-btn, .mic-language { width: 100%; }
       .voice-row { grid-template-columns: 1fr; }
+      .voice-controls { grid-template-columns: 1fr; }
       .mic-config-row { grid-template-columns: 1fr; }
       .profile-grid { grid-template-columns: 1fr; }
       .profile-wide { grid-column: span 1; }
@@ -417,7 +457,7 @@
 <body>
   <div id="welcome" class="welcome-screen">
     <div class="welcome-card">
-      <div class="version">v13</div>
+      <div class="version">v14</div>
       <h1>Bubbe's Morning Friend</h1>
       <div class="sub">A warm, simple companion to start your day.</div>
       <div class="profile-card">
@@ -452,7 +492,7 @@
   <div id="chat" class="chat-screen">
     <div class="chat-header">
       Bubbe's Morning Friend
-      <span class="version">v13</span>
+      <span class="version">v14</span>
     </div>
     <div class="chat-shell">
       <div class="chat-card">
@@ -509,6 +549,25 @@
             </select>
             <button type="button" class="voice-stop-btn" id="voiceStopBtn" onclick="stopSpeaking()">Stop Voice</button>
           </div>
+          <div class="voice-controls">
+            <label class="voice-control">
+              <span>Rate</span>
+              <input id="voiceRate" type="range" min="0.8" max="1.1" step="0.01" value="0.92" oninput="updateVoiceSettings()" />
+              <span id="voiceRateValue">0.92x</span>
+            </label>
+            <label class="voice-control">
+              <span>Pitch</span>
+              <input id="voicePitch" type="range" min="0.85" max="1.1" step="0.01" value="0.95" oninput="updateVoiceSettings()" />
+              <span id="voicePitchValue">0.95</span>
+            </label>
+            <select id="voicePreset" class="voice-preset" onchange="applyVoicePreset(this.value)">
+              <option value="natural">Preset: Natural</option>
+              <option value="calm">Preset: Calm</option>
+              <option value="bright">Preset: Bright</option>
+            </select>
+            <button type="button" class="voice-preview-btn" id="voicePreviewBtn" onclick="previewVoice()">Preview Voice</button>
+          </div>
+          <div class="voice-meta" id="voiceMeta"></div>
         </div>
       </div>
     </div>
@@ -524,6 +583,9 @@
     const PROFILE_STORAGE_KEY = "bmf_profile";
     const VOICE_ENABLED_STORAGE_KEY = "bmf_voice_enabled";
     const VOICE_NAME_STORAGE_KEY = "bmf_voice_name";
+    const VOICE_RATE_STORAGE_KEY = "bmf_voice_rate";
+    const VOICE_PITCH_STORAGE_KEY = "bmf_voice_pitch";
+    const VOICE_PRESET_STORAGE_KEY = "bmf_voice_preset";
     const MIC_AUTO_SEND_DELAY_STORAGE_KEY = "bmf_mic_auto_send_ms";
     const DAILY_BACKGROUNDS = [
       "https://images.unsplash.com/photo-1472396961693-142e6e269027?auto=format&fit=crop&w=1800&q=80",
@@ -753,8 +815,26 @@
       return localStorage.getItem(VOICE_NAME_STORAGE_KEY) || "";
     }
 
+    function getVoiceRate() {
+      const value = Number(localStorage.getItem(VOICE_RATE_STORAGE_KEY));
+      if (!Number.isFinite(value)) return 0.92;
+      return Math.min(1.1, Math.max(0.8, value));
+    }
+
+    function getVoicePitch() {
+      const value = Number(localStorage.getItem(VOICE_PITCH_STORAGE_KEY));
+      if (!Number.isFinite(value)) return 0.95;
+      return Math.min(1.1, Math.max(0.85, value));
+    }
+
+    function getVoicePreset() {
+      const preset = localStorage.getItem(VOICE_PRESET_STORAGE_KEY);
+      return preset === "calm" || preset === "bright" || preset === "natural" ? preset : "natural";
+    }
+
     function refreshVoiceOptions() {
       const select = document.getElementById("voiceSelect");
+      const meta = document.getElementById("voiceMeta");
       if (!select || !synth) return;
 
       availableVoices = synth.getVoices();
@@ -767,6 +847,8 @@
         if (voice.name === selected) option.selected = true;
         select.appendChild(option);
       });
+      const activeName = selected || "System default";
+      if (meta) meta.textContent = `Active voice: ${activeName} (browser/system text-to-speech)`;
     }
 
     function updateVoiceControlState() {
@@ -774,23 +856,75 @@
       const toggle = document.getElementById("voiceEnabled");
       const select = document.getElementById("voiceSelect");
       const stopBtn = document.getElementById("voiceStopBtn");
+      const rate = document.getElementById("voiceRate");
+      const pitch = document.getElementById("voicePitch");
+      const preset = document.getElementById("voicePreset");
+      const preview = document.getElementById("voicePreviewBtn");
       if (toggle) toggle.checked = enabled;
       if (select) select.disabled = !enabled || !synth;
       if (stopBtn) stopBtn.disabled = !synth;
+      if (rate) rate.disabled = !enabled || !synth;
+      if (pitch) pitch.disabled = !enabled || !synth;
+      if (preset) preset.disabled = !enabled || !synth;
+      if (preview) preview.disabled = !enabled || !synth;
+    }
+
+    function refreshVoiceValueLabels() {
+      const rate = getVoiceRate();
+      const pitch = getVoicePitch();
+      const rateNode = document.getElementById("voiceRateValue");
+      const pitchNode = document.getElementById("voicePitchValue");
+      if (rateNode) rateNode.textContent = `${rate.toFixed(2)}x`;
+      if (pitchNode) pitchNode.textContent = pitch.toFixed(2);
     }
 
     function updateVoiceSettings() {
       const toggle = document.getElementById("voiceEnabled");
       const select = document.getElementById("voiceSelect");
+      const rate = document.getElementById("voiceRate");
+      const pitch = document.getElementById("voicePitch");
+      const preset = document.getElementById("voicePreset");
       const enabled = Boolean(toggle && toggle.checked);
       localStorage.setItem(VOICE_ENABLED_STORAGE_KEY, enabled ? "1" : "0");
       if (select) {
         localStorage.setItem(VOICE_NAME_STORAGE_KEY, select.value || "");
       }
+      if (rate) localStorage.setItem(VOICE_RATE_STORAGE_KEY, String(rate.value || "0.92"));
+      if (pitch) localStorage.setItem(VOICE_PITCH_STORAGE_KEY, String(pitch.value || "0.95"));
+      if (preset) localStorage.setItem(VOICE_PRESET_STORAGE_KEY, preset.value || "natural");
       if (!enabled) {
         stopSpeaking();
       }
+      const meta = document.getElementById("voiceMeta");
+      if (meta) {
+        const name = select && select.value ? select.value : "System default";
+        meta.textContent = `Active voice: ${name} (browser/system text-to-speech)`;
+      }
+      refreshVoiceValueLabels();
       updateVoiceControlState();
+    }
+
+    function applyVoicePreset(name) {
+      const preset = name === "calm" || name === "bright" ? name : "natural";
+      const rate = document.getElementById("voiceRate");
+      const pitch = document.getElementById("voicePitch");
+      const presetNode = document.getElementById("voicePreset");
+      if (preset === "calm") {
+        if (rate) rate.value = "0.86";
+        if (pitch) pitch.value = "0.90";
+      } else if (preset === "bright") {
+        if (rate) rate.value = "1.00";
+        if (pitch) pitch.value = "1.02";
+      } else {
+        if (rate) rate.value = "0.92";
+        if (pitch) pitch.value = "0.95";
+      }
+      if (presetNode) presetNode.value = preset;
+      updateVoiceSettings();
+    }
+
+    function previewVoice() {
+      speakText("Good morning. I am here with you. We can take this moment gently.");
     }
 
     function stopSpeaking() {
@@ -814,8 +948,8 @@
         );
         if (fallbackVoice) utterance.voice = fallbackVoice;
       }
-      utterance.rate = 0.92;
-      utterance.pitch = 0.95;
+      utterance.rate = getVoiceRate();
+      utterance.pitch = getVoicePitch();
       synth.speak(utterance);
     }
 
@@ -824,13 +958,28 @@
         const toggle = document.getElementById("voiceEnabled");
         const select = document.getElementById("voiceSelect");
         const stopBtn = document.getElementById("voiceStopBtn");
+        const rate = document.getElementById("voiceRate");
+        const pitch = document.getElementById("voicePitch");
+        const preset = document.getElementById("voicePreset");
+        const preview = document.getElementById("voicePreviewBtn");
         if (toggle) toggle.disabled = true;
         if (select) select.disabled = true;
         if (stopBtn) stopBtn.disabled = true;
+        if (rate) rate.disabled = true;
+        if (pitch) pitch.disabled = true;
+        if (preset) preset.disabled = true;
+        if (preview) preview.disabled = true;
         return;
       }
 
       refreshVoiceOptions();
+      const rate = document.getElementById("voiceRate");
+      const pitch = document.getElementById("voicePitch");
+      const preset = document.getElementById("voicePreset");
+      if (rate) rate.value = String(getVoiceRate());
+      if (pitch) pitch.value = String(getVoicePitch());
+      if (preset) preset.value = getVoicePreset();
+      refreshVoiceValueLabels();
       if (typeof synth.onvoiceschanged !== "undefined") {
         synth.onvoiceschanged = refreshVoiceOptions;
       }
