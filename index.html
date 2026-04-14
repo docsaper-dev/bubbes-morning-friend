@@ -316,6 +316,37 @@
       margin-top: 6px;
       min-height: 1.1em;
     }
+    .mic-config-row {
+      display: grid;
+      grid-template-columns: auto auto auto;
+      gap: 8px;
+      align-items: center;
+      margin-top: 6px;
+    }
+    .mic-state {
+      font-size: 0.82rem;
+      color: #334155;
+      background: #e2e8f0;
+      border-radius: 999px;
+      padding: 4px 10px;
+      width: fit-content;
+    }
+    .mic-send-now-btn {
+      border-radius: 10px;
+      padding: 7px 10px;
+      font-size: 0.8rem;
+      background: #e2e8f0;
+      color: #0f172a;
+      min-width: 86px;
+    }
+    .mic-delay {
+      border: 1px solid #cbd5e1;
+      border-radius: 10px;
+      background: #fff;
+      color: #0f172a;
+      font-size: 0.82rem;
+      padding: 7px 10px;
+    }
     .voice-row {
       display: grid;
       grid-template-columns: auto 1fr auto;
@@ -377,6 +408,7 @@
       .action-row { grid-template-columns: 1fr; }
       .mic-btn, .mic-language { width: 100%; }
       .voice-row { grid-template-columns: 1fr; }
+      .mic-config-row { grid-template-columns: 1fr; }
       .profile-grid { grid-template-columns: 1fr; }
       .profile-wide { grid-column: span 1; }
     }
@@ -385,7 +417,7 @@
 <body>
   <div id="welcome" class="welcome-screen">
     <div class="welcome-card">
-      <div class="version">v12</div>
+      <div class="version">v13</div>
       <h1>Bubbe's Morning Friend</h1>
       <div class="sub">A warm, simple companion to start your day.</div>
       <div class="profile-card">
@@ -420,7 +452,7 @@
   <div id="chat" class="chat-screen">
     <div class="chat-header">
       Bubbe's Morning Friend
-      <span class="version">v12</span>
+      <span class="version">v13</span>
     </div>
     <div class="chat-shell">
       <div class="chat-card">
@@ -458,6 +490,15 @@
             </select>
           </div>
           <div class="mic-status" id="micStatus"></div>
+          <div class="mic-config-row">
+            <div class="mic-state" id="micState">Mic: Ready</div>
+            <button type="button" class="mic-send-now-btn" id="micSendNowBtn" onclick="sendNowFromMic()">Send now</button>
+            <select id="micDelay" class="mic-delay" onchange="updateMicDelay()">
+              <option value="2000">Pause delay: 2s</option>
+              <option value="4000">Pause delay: 4s</option>
+              <option value="6000">Pause delay: 6s</option>
+            </select>
+          </div>
           <div class="voice-row">
             <label class="voice-toggle">
               <input type="checkbox" id="voiceEnabled" onchange="updateVoiceSettings()" />
@@ -483,7 +524,7 @@
     const PROFILE_STORAGE_KEY = "bmf_profile";
     const VOICE_ENABLED_STORAGE_KEY = "bmf_voice_enabled";
     const VOICE_NAME_STORAGE_KEY = "bmf_voice_name";
-    const MIC_AUTO_SEND_DELAY_MS = 4000;
+    const MIC_AUTO_SEND_DELAY_STORAGE_KEY = "bmf_mic_auto_send_ms";
     const DAILY_BACKGROUNDS = [
       "https://images.unsplash.com/photo-1472396961693-142e6e269027?auto=format&fit=crop&w=1800&q=80",
       "https://images.unsplash.com/photo-1468327768560-75b778cbb551?auto=format&fit=crop&w=1800&q=80",
@@ -503,6 +544,7 @@
     let recognition = null;
     let availableVoices = [];
     let micAutoSendTimer = null;
+    let micState = "ready";
     let micCommittedText = "";
 
     function setDailyBackground() {
@@ -664,11 +706,43 @@
       if (micBtn) micBtn.disabled = on || !micSupported;
       const micLanguage = document.getElementById("micLanguage");
       if (micLanguage) micLanguage.disabled = on || micListening || !micSupported;
+      const micSendNowBtn = document.getElementById("micSendNowBtn");
+      if (micSendNowBtn) micSendNowBtn.disabled = on;
+      const micDelay = document.getElementById("micDelay");
+      if (micDelay) micDelay.disabled = on || micListening;
     }
 
     function setMicStatus(text) {
       const status = document.getElementById("micStatus");
       if (status) status.textContent = text || "";
+    }
+
+    function setMicState(nextState) {
+      micState = nextState;
+      const node = document.getElementById("micState");
+      if (!node) return;
+      const labels = {
+        ready: "Mic: Ready",
+        listening: "Mic: Listening",
+        paused: "Mic: Paused",
+        sending: "Mic: Sending...",
+      };
+      node.textContent = labels[nextState] || "Mic: Ready";
+    }
+
+    function getMicAutoSendDelayMs() {
+      const saved = Number(localStorage.getItem(MIC_AUTO_SEND_DELAY_STORAGE_KEY));
+      if (saved === 2000 || saved === 4000 || saved === 6000) return saved;
+      return 4000;
+    }
+
+    function updateMicDelay() {
+      const select = document.getElementById("micDelay");
+      if (!select) return;
+      const value = Number(select.value);
+      const valid = value === 2000 || value === 4000 || value === 6000 ? value : 4000;
+      localStorage.setItem(MIC_AUTO_SEND_DELAY_STORAGE_KEY, String(valid));
+      select.value = String(valid);
     }
 
     function readVoiceEnabled() {
@@ -771,6 +845,11 @@
       micBtn.disabled = busy || !micSupported;
       const micLanguage = document.getElementById("micLanguage");
       if (micLanguage) micLanguage.disabled = busy || micListening || !micSupported;
+      const micDelay = document.getElementById("micDelay");
+      if (micDelay) micDelay.disabled = busy || micListening;
+      const micSendNowBtn = document.getElementById("micSendNowBtn");
+      const input = document.getElementById("input");
+      if (micSendNowBtn) micSendNowBtn.disabled = busy || !(input && input.value.trim());
     }
 
     function initMic() {
@@ -794,6 +873,7 @@
         const input = document.getElementById("input");
         micCommittedText = input ? input.value.trim() : "";
         setMicStatus("Listening…");
+        setMicState("listening");
         updateMicButton();
       };
 
@@ -822,6 +902,7 @@
         } else {
           setMicStatus(`Microphone error: ${event.error}`);
         }
+        setMicState("ready");
       };
 
       recognition.onend = () => {
@@ -832,22 +913,26 @@
           const finalText = input ? input.value.trim() : "";
           if (finalText) {
             setMicStatus("Pause detected. Sending in a moment…");
+            setMicState("paused");
             micAutoSendTimer = setTimeout(() => {
               micAutoSendTimer = null;
               const latest = input ? input.value.trim() : "";
               if (latest && !busy && !micListening) {
                 micCommittedText = "";
+                setMicState("sending");
                 sendTyped();
               }
-            }, MIC_AUTO_SEND_DELAY_MS);
+            }, getMicAutoSendDelayMs());
           } else {
             micCommittedText = "";
             setMicStatus("Ready for microphone input.");
+            setMicState("ready");
           }
         }
       };
 
       setMicStatus("Ready for microphone input.");
+      setMicState("ready");
       updateMicButton();
       updateMicLanguage();
     }
@@ -864,6 +949,23 @@
       }
       setMicStatus("Starting microphone…");
       recognition.start();
+    }
+
+    function sendNowFromMic() {
+      if (busy) return;
+      if (micAutoSendTimer) {
+        clearTimeout(micAutoSendTimer);
+        micAutoSendTimer = null;
+      }
+      if (micListening && recognition) {
+        recognition.stop();
+      }
+      const input = document.getElementById("input");
+      const value = input ? input.value.trim() : "";
+      if (!value) return;
+      setMicState("sending");
+      micCommittedText = "";
+      sendTyped();
     }
 
     function updateMicLanguage() {
@@ -890,6 +992,15 @@
       if (nameInput) nameInput.value = profile.name;
       if (languageInput) languageInput.value = profile.language;
       if (familyInput) familyInput.value = profile.family.join(", ");
+    }
+
+    function initMicControls() {
+      const micDelay = document.getElementById("micDelay");
+      if (micDelay) {
+        micDelay.value = String(getMicAutoSendDelayMs());
+      }
+      updateMicDelay();
+      setMicState("ready");
     }
 
     function saveProfile() {
@@ -999,8 +1110,12 @@
         if (sendBtn) sendBtn.textContent = prevSendLabel;
         busy = false;
         setBusy(false);
+        if (!micListening) {
+          setMicState("ready");
+        }
         renderMessages();
         renderSuggestions();
+        updateMicButton();
       }
     }
 
@@ -1017,6 +1132,7 @@
     setDailyBackground();
     initProfileForm();
     initVoice();
+    initMicControls();
     initMic();
     initMessages();
     renderSuggestions();
