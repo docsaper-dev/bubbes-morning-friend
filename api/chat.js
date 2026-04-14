@@ -1,3 +1,5 @@
+const crypto = require("crypto");
+
 function readBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
@@ -37,6 +39,55 @@ function logSafety(event, payload) {
   console.log("[safety]", JSON.stringify({ event, ...payload }));
 }
 
+const rateBuckets = new Map();
+
+function getClientIp(req) {
+  const forwarded = req.headers["x-forwarded-for"];
+  if (typeof forwarded === "string" && forwarded.trim()) {
+    return forwarded.split(",")[0].trim();
+  }
+  const realIp = req.headers["x-real-ip"];
+  if (typeof realIp === "string" && realIp.trim()) {
+    return realIp.trim();
+  }
+  return req.socket?.remoteAddress || "unknown";
+}
+
+function makeRateKey(password, ip) {
+  const token = `${password || "none"}|${ip}`;
+  return crypto.createHash("sha256").update(token).digest("hex");
+}
+
+function getRateConfig() {
+  const windowMs = Number(process.env.RATE_LIMIT_WINDOW_MS);
+  const max = Number(process.env.RATE_LIMIT_MAX_REQUESTS);
+  return {
+    windowMs: Number.isFinite(windowMs) && windowMs > 0 ? windowMs : 10 * 60 * 1000,
+    max: Number.isFinite(max) && max > 0 ? max : 40,
+  };
+}
+
+function isRateLimited(rateKey, now, config) {
+  const bucket = rateBuckets.get(rateKey);
+  if (!bucket || now - bucket.windowStart >= config.windowMs) {
+    rateBuckets.set(rateKey, { windowStart: now, count: 1 });
+    return false;
+  }
+  bucket.count += 1;
+  rateBuckets.set(rateKey, bucket);
+  return bucket.count > config.max;
+}
+
+function pruneRateBuckets(now, config) {
+  if (rateBuckets.size > 2000) {
+    for (const [key, bucket] of rateBuckets.entries()) {
+      if (now - bucket.windowStart >= config.windowMs) {
+        rateBuckets.delete(key);
+      }
+    }
+  }
+}
+
 function sanitizeMessages(raw) {
   if (!Array.isArray(raw) || raw.length === 0) {
     return null;
@@ -69,15 +120,25 @@ module.exports = async (req, res) => {
   if (!sitePassword && req.headers["x-auth-probe"] === "1") {
     return res.status(204).end();
   }
+  const providedPassword = req.headers["x-site-password"];
   if (sitePassword) {
-    const provided = req.headers["x-site-password"];
-    if (!provided || provided !== sitePassword) {
+    if (!providedPassword || providedPassword !== sitePassword) {
       logSafety("auth_failed", { requestId });
       return res.status(401).json({ error: "Unauthorized" });
     }
     if (req.headers["x-auth-probe"] === "1") {
       return res.status(204).end();
     }
+  }
+
+  const clientIp = getClientIp(req);
+  const rateConfig = getRateConfig();
+  const now = Date.now();
+  pruneRateBuckets(now, rateConfig);
+  const rateKey = makeRateKey(String(providedPassword || ""), clientIp);
+  if (isRateLimited(rateKey, now, rateConfig)) {
+    logSafety("rate_limited", { requestId, clientIp });
+    return res.status(429).json({ error: "Too many requests. Please wait and try again." });
   }
 
   const apiKey = process.env.OPENAI_API_KEY;
