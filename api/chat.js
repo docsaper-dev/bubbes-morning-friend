@@ -65,6 +65,21 @@ module.exports = async (req, res) => {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
+  const sitePassword = process.env.SITE_PASSWORD;
+  if (!sitePassword && req.headers["x-auth-probe"] === "1") {
+    return res.status(204).end();
+  }
+  if (sitePassword) {
+    const provided = req.headers["x-site-password"];
+    if (!provided || provided !== sitePassword) {
+      logSafety("auth_failed", { requestId });
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+    if (req.headers["x-auth-probe"] === "1") {
+      return res.status(204).end();
+    }
+  }
+
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     return res.status(503).json({ error: "OpenAI is not configured (missing OPENAI_API_KEY)." });

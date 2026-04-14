@@ -34,11 +34,46 @@
     }
     .welcome-screen {
       min-height: 100vh;
-      display: flex;
+      display: none;
       align-items: center;
       justify-content: center;
       padding: 24px;
       position: relative;
+    }
+    .auth-screen {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .auth-card {
+      width: 100%;
+      max-width: 520px;
+      background: rgba(255, 255, 255, 0.94);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 22px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+      text-align: center;
+    }
+    .auth-card h2 {
+      margin: 0 0 10px;
+      font-size: 1.5rem;
+    }
+    .auth-input {
+      width: 100%;
+      border: 1px solid #cbd5e1;
+      border-radius: 12px;
+      padding: 10px 12px;
+      font-size: 1rem;
+      margin: 10px 0;
+    }
+    .auth-error {
+      color: #b91c1c;
+      font-size: 0.9rem;
+      min-height: 1.1em;
+      margin-top: 6px;
     }
     .welcome-card {
       width: 100%;
@@ -479,9 +514,19 @@
   </style>
 </head>
 <body>
+  <div id="auth" class="auth-screen">
+    <div class="auth-card">
+      <h2>Private Access</h2>
+      <div class="sub" style="font-size:1rem;margin-bottom:10px;">Enter the site password to continue.</div>
+      <input id="accessPassword" class="auth-input" type="password" placeholder="Site password" />
+      <button class="primary" type="button" onclick="unlockSite()">Unlock</button>
+      <div id="authError" class="auth-error"></div>
+    </div>
+  </div>
+
   <div id="welcome" class="welcome-screen">
     <div class="welcome-card">
-      <div class="version">v16</div>
+      <div class="version">v17</div>
       <h1>Bubbe's Morning Friend</h1>
       <div class="sub">A warm, simple companion to start your day.</div>
       <div class="profile-card">
@@ -519,7 +564,7 @@
   <div id="chat" class="chat-screen">
     <div class="chat-header">
       Bubbe's Morning Friend
-      <span class="version">v16</span>
+      <span class="version">v17</span>
       <button type="button" class="new-topic-btn" onclick="beginNewTopic()">New topic</button>
     </div>
     <div class="chat-shell">
@@ -617,6 +662,7 @@
     const VOICE_MODE_STORAGE_KEY = "bmf_voice_mode";
     const MIC_AUTO_SEND_DELAY_STORAGE_KEY = "bmf_mic_auto_send_ms";
     const CONVERSATION_STORAGE_KEY = "bmf_conversation";
+    const ACCESS_PASSWORD_STORAGE_KEY = "bmf_access_password";
     const DAILY_BACKGROUNDS = [
       "https://images.unsplash.com/photo-1472396961693-142e6e269027?auto=format&fit=crop&w=1800&q=80",
       "https://images.unsplash.com/photo-1468327768560-75b778cbb551?auto=format&fit=crop&w=1800&q=80",
@@ -652,6 +698,57 @@
       }
       const idx = hash % DAILY_BACKGROUNDS.length;
       document.documentElement.style.setProperty("--bg-photo", `url("${DAILY_BACKGROUNDS[idx]}")`);
+    }
+
+    function getAccessPassword() {
+      return sessionStorage.getItem(ACCESS_PASSWORD_STORAGE_KEY) || "";
+    }
+
+    function showAuth() {
+      const auth = document.getElementById("auth");
+      const welcome = document.getElementById("welcome");
+      const chat = document.getElementById("chat");
+      if (auth) auth.style.display = "flex";
+      if (welcome) welcome.style.display = "none";
+      if (chat) chat.style.display = "none";
+    }
+
+    function showWelcome() {
+      const auth = document.getElementById("auth");
+      const welcome = document.getElementById("welcome");
+      const chat = document.getElementById("chat");
+      if (auth) auth.style.display = "none";
+      if (welcome) welcome.style.display = "flex";
+      if (chat) chat.style.display = "none";
+    }
+
+    async function unlockSite() {
+      const input = document.getElementById("accessPassword");
+      const error = document.getElementById("authError");
+      const password = input ? input.value.trim() : "";
+      if (!password) {
+        if (error) error.textContent = "Please enter password.";
+        return;
+      }
+      try {
+        const probe = await fetch("/api/chat", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Site-Password": password,
+            "X-Auth-Probe": "1"
+          },
+          body: "{}"
+        });
+        if (probe.status === 401) {
+          if (error) error.textContent = "Incorrect password.";
+          return;
+        }
+      } catch {}
+      sessionStorage.setItem(ACCESS_PASSWORD_STORAGE_KEY, password);
+      if (error) error.textContent = "";
+      if (input) input.value = "";
+      showWelcome();
     }
 
     function readProfile() {
@@ -1415,11 +1512,18 @@
       try {
         const res = await fetch("/api/chat", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "X-Site-Password": getAccessPassword()
+          },
           body: JSON.stringify({ messages })
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
+          if (res.status === 401) {
+            showAuth();
+            throw new Error("Session locked. Re-enter password.");
+          }
           throw new Error(data.error || "Request failed");
         }
         const reply = typeof data.reply === "string" ? data.reply : "";
@@ -1454,6 +1558,12 @@
 
     document.addEventListener("keydown", function (event) {
       const input = document.getElementById("input");
+      const authInput = document.getElementById("accessPassword");
+      if (document.activeElement === authInput && event.key === "Enter") {
+        event.preventDefault();
+        unlockSite();
+        return;
+      }
       if (!input || busy) return;
       if (document.activeElement === input && event.key === "Enter" && !event.shiftKey) {
         event.preventDefault();
@@ -1470,6 +1580,11 @@
     initMessages();
     updateWelcomeActions();
     renderSuggestions();
+    if (getAccessPassword()) {
+      showWelcome();
+    } else {
+      showAuth();
+    }
   </script>
 </body>
 </html>
