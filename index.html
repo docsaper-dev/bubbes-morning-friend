@@ -1015,6 +1015,23 @@
       return localStorage.getItem(VOICE_NAME_STORAGE_KEY) || "";
     }
 
+    function pickPreferredEnglishFemaleVoiceName() {
+      if (!availableVoices.length) return "";
+      const prefer = [
+        /en-gb.*(female|woman|zira|samantha|jenny|aria)/i,
+        /(jenny|samantha|zira|aria)/i,
+        /en-gb/i,
+        /en-us/i,
+        /female|woman/i,
+      ];
+      for (const rule of prefer) {
+        const match = availableVoices.find((v) => rule.test(`${v.name} ${v.lang}`));
+        if (match) return match.name;
+      }
+      const anyEnglish = availableVoices.find((v) => /^en[-_]/i.test(v.lang));
+      return anyEnglish ? anyEnglish.name : "";
+    }
+
     function getVoiceRate() {
       const value = Number(localStorage.getItem(VOICE_RATE_STORAGE_KEY));
       if (!Number.isFinite(value)) return 0.92;
@@ -1038,7 +1055,14 @@
       if (!select || !synth) return;
 
       availableVoices = synth.getVoices();
-      const selected = selectedVoiceName();
+      let selected = selectedVoiceName();
+      if (!selected) {
+        const preferred = pickPreferredEnglishFemaleVoiceName();
+        if (preferred) {
+          selected = preferred;
+          localStorage.setItem(VOICE_NAME_STORAGE_KEY, preferred);
+        }
+      }
       select.innerHTML = '<option value="">System default voice</option>';
       availableVoices.forEach((voice) => {
         const option = document.createElement("option");
