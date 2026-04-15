@@ -105,6 +105,18 @@ function sanitizeMessages(raw) {
   return out.length ? out : null;
 }
 
+function getAllowedPasswords() {
+  const values = [
+    process.env.OWNER_PASSWORD,
+    process.env.GUEST_PASSWORD,
+    process.env.SITE_PASSWORD, // backwards compatibility
+  ];
+  return values
+    .filter((v) => typeof v === "string")
+    .map((v) => v.trim())
+    .filter(Boolean);
+}
+
 module.exports = async (req, res) => {
   const startedAt = Date.now();
   const requestId = makeRequestId();
@@ -116,13 +128,13 @@ module.exports = async (req, res) => {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const sitePassword = process.env.SITE_PASSWORD;
-  if (!sitePassword && req.headers["x-auth-probe"] === "1") {
+  const allowedPasswords = getAllowedPasswords();
+  if (allowedPasswords.length === 0 && req.headers["x-auth-probe"] === "1") {
     return res.status(204).end();
   }
   const providedPassword = req.headers["x-site-password"];
-  if (sitePassword) {
-    if (!providedPassword || providedPassword !== sitePassword) {
+  if (allowedPasswords.length > 0) {
+    if (!providedPassword || !allowedPasswords.includes(String(providedPassword))) {
       logSafety("auth_failed", { requestId });
       return res.status(401).json({ error: "Unauthorized" });
     }
