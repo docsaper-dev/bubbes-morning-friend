@@ -687,6 +687,7 @@
     let skipNextMicEndSend = false;
     let micState = "ready";
     let micCommittedText = "";
+    let micInterimText = "";
     let aiSpeaking = false;
 
     function setDailyBackground() {
@@ -1246,6 +1247,7 @@
         micEndedBySilence = false;
         const input = document.getElementById("input");
         micCommittedText = input ? input.value.trim() : "";
+        micInterimText = "";
         setMicStatus("Listening…");
         setMicState("listening");
         updateMicButton();
@@ -1253,20 +1255,26 @@
       };
 
       recognition.onresult = (event) => {
-        let interim = "";
-        for (let i = event.resultIndex; i < event.results.length; i += 1) {
-          const piece = event.results[i][0].transcript.trim();
+        // Rebuild transcript from all current recognition results. This is more
+        // stable across browsers than relying only on resultIndex deltas.
+        let rebuiltFinal = "";
+        let rebuiltInterim = "";
+        for (let i = 0; i < event.results.length; i += 1) {
+          const piece = (event.results[i][0].transcript || "").trim();
           if (!piece) continue;
           if (event.results[i].isFinal) {
-            micCommittedText = `${micCommittedText} ${piece}`.trim();
+            rebuiltFinal = `${rebuiltFinal} ${piece}`.trim();
           } else {
-            interim = `${interim} ${piece}`.trim();
+            rebuiltInterim = `${rebuiltInterim} ${piece}`.trim();
           }
         }
+        micCommittedText = rebuiltFinal;
+        micInterimText = rebuiltInterim;
         const input = document.getElementById("input");
         if (input) {
-          input.value = `${micCommittedText} ${interim}`.trim();
+          input.value = `${micCommittedText} ${micInterimText}`.trim();
         }
+        setMicStatus("Listening…");
         scheduleMicSilenceTimeout();
       };
 
@@ -1305,12 +1313,14 @@
               const latest = input ? input.value.trim() : "";
               if (latest && !busy && !micListening) {
                 micCommittedText = "";
+                micInterimText = "";
                 setMicState("sending");
                 sendTyped();
               }
             }, delay);
           } else {
             micCommittedText = "";
+            micInterimText = "";
             setMicStatus("Ready for microphone input.");
             setMicState("ready");
           }
