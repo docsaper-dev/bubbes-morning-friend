@@ -526,7 +526,7 @@
 
   <div id="welcome" class="welcome-screen">
     <div class="welcome-card">
-      <div class="version">v17</div>
+      <div class="version">v18</div>
       <h1>Bubbe's Morning Friend</h1>
       <div class="sub">A warm, simple companion to start your day.</div>
       <div class="profile-card">
@@ -564,7 +564,7 @@
   <div id="chat" class="chat-screen">
     <div class="chat-header">
       Bubbe's Morning Friend
-      <span class="version">v17</span>
+      <span class="version">v18</span>
       <button type="button" class="new-topic-btn" onclick="beginNewTopic()">New topic</button>
     </div>
     <div class="chat-shell">
@@ -705,6 +705,21 @@
       return sessionStorage.getItem(ACCESS_PASSWORD_STORAGE_KEY) || "";
     }
 
+    async function probeAccess(password) {
+      const headers = {
+        "Content-Type": "application/json",
+        "X-Auth-Probe": "1"
+      };
+      if (password) {
+        headers["X-Site-Password"] = password;
+      }
+      return fetch("/api/chat", {
+        method: "POST",
+        headers,
+        body: "{}"
+      });
+    }
+
     function showAuth() {
       const auth = document.getElementById("auth");
       const welcome = document.getElementById("welcome");
@@ -731,25 +746,40 @@
         if (error) error.textContent = "Please enter password.";
         return;
       }
+      let probe;
       try {
-        const probe = await fetch("/api/chat", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Site-Password": password,
-            "X-Auth-Probe": "1"
-          },
-          body: "{}"
-        });
-        if (probe.status === 401) {
-          if (error) error.textContent = "Incorrect password.";
-          return;
-        }
-      } catch {}
+        probe = await probeAccess(password);
+      } catch {
+        if (error) error.textContent = "Could not verify password right now. Please try again.";
+        return;
+      }
+      if (probe.status === 401) {
+        if (error) error.textContent = "Incorrect password.";
+        return;
+      }
+      if (probe.status !== 204) {
+        if (error) error.textContent = "Could not verify password right now. Please try again.";
+        return;
+      }
       sessionStorage.setItem(ACCESS_PASSWORD_STORAGE_KEY, password);
       if (error) error.textContent = "";
       if (input) input.value = "";
       showWelcome();
+    }
+
+    async function initAccessGate() {
+      const savedPassword = getAccessPassword();
+      try {
+        const probe = await probeAccess(savedPassword);
+        if (probe.status === 204) {
+          showWelcome();
+          return;
+        }
+        if (probe.status === 401) {
+          sessionStorage.removeItem(ACCESS_PASSWORD_STORAGE_KEY);
+        }
+      } catch {}
+      showAuth();
     }
 
     function readProfile() {
@@ -1614,11 +1644,7 @@
     initMessages();
     updateWelcomeActions();
     renderSuggestions();
-    if (getAccessPassword()) {
-      showWelcome();
-    } else {
-      showAuth();
-    }
+    initAccessGate();
   </script>
 </body>
 </html>
